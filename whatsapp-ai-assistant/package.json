@@ -1,0 +1,36 @@
+{
+  "name": "whatsapp-ai-assistant",
+  "version": "1.0.0",
+  "description": "AI-powered response suggestions for WhatsApp Web",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "dev:firefox": "wxt -b firefox",
+    "build": "wxt build",
+    "build:firefox": "wxt build -b firefox",
+    "zip": "wxt zip",
+    "zip:firefox": "wxt zip -b firefox",
+    "compile": "tsc --noEmit",
+    "postinstall": "wxt prepare"
+  },
+  "dependencies": {
+    "openai": "^4.20.0",
+    "@radix-ui/react-switch": "^1.0.3",
+    "@radix-ui/react-select": "^2.0.0",
+    "lucide-react": "^0.294.0",
+    "zustand": "^4.4.7",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.251",
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@wxt-dev/module-react": "^0.3.0",
+    "wxt": "^0.20.13",
+    "typescript": "^5.3.3",
+    "tailwindcss": "^3.3.6",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.32"
+  }
+}
