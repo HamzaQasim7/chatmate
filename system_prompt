@@ -1,0 +1,1422 @@
+# Cursor AI Agent Prompt: WhatsApp AI Assistant Chrome Extension (WXT Framework)
+
+Copy and paste this entire prompt into Cursor AI to build the modern Chrome extension with WXT:
+
+---
+
+## 🎯 PROJECT BRIEF
+
+Build a modern Chrome Extension using **WXT Framework** with **React**, **TypeScript**, and **Vite** that integrates with WhatsApp Web to provide real-time AI-powered message response suggestions using OpenAI API.
+
+**Project Name:** WhatsApp AI Assistant  
+**Framework:** WXT (Next-gen Extension Framework)  
+**UI Library:** React 18+  
+**Language:** TypeScript 5+  
+**Build Tool:** Vite 5+  
+**Styling:** TailwindCSS 3+  
+**AI Integration:** OpenAI API (GPT-3.5-turbo or GPT-4)  
+**Manifest:** V3 (2025 Standard)  
+
+---
+
+## 🚀 INITIAL SETUP
+
+### Step 1: Initialize WXT Project
+
+```bash
+# Create new WXT project
+npx wxt@latest init whatsapp-ai-assistant
+
+# During setup, choose:
+# - Package Manager: npm
+# - Template: react
+# - TypeScript: Yes
+# - Install dependencies: Yes
+
+cd whatsapp-ai-assistant
+```
+
+### Step 2: Install Additional Dependencies
+
+```bash
+# Install OpenAI SDK and utilities
+npm install openai
+npm install @radix-ui/react-switch @radix-ui/react-select
+npm install lucide-react
+npm install zustand
+
+# Dev dependencies
+npm install -D @types/chrome
+```
+
+### Step 3: Start Development Server
+
+```bash
+npm run dev
+# Extension will auto-reload in Chrome on file changes
+```
+
+---
+
+## 📁 PROJECT STRUCTURE (WXT)
+
+```
+whatsapp-ai-assistant/
+├── wxt.config.ts                 # WXT configuration
+├── package.json
+├── tsconfig.json
+├── tailwind.config.js
+├── .output/                      # Build output (auto-generated)
+│   └── chrome-mv3/              # Chrome extension build
+├── entrypoints/
+│   ├── popup/
+│   │   ├── App.tsx              # Settings UI (React component)
+│   │   ├── index.html           # Popup HTML
+│   │   └── style.css            # Popup styles
+│   ├── content/
+│   │   ├── index.ts             # Content script entry
+│   │   └── sidebar.tsx          # Sidebar React component
+│   ├── background.ts            # Service worker
+│   └── content.css              # Content script styles
+├── components/
+│   ├── SuggestionCard.tsx       # Reusable suggestion card
+│   ├── SettingsForm.tsx         # Settings form component
+│   └── LoadingSpinner.tsx       # Loading component
+├── lib/
+│   ├── openai.ts                # OpenAI API wrapper
+│   ├── storage.ts               # Storage utilities
+│   ├── whatsapp.ts              # WhatsApp DOM helpers
+│   └── types.ts                 # TypeScript types
+├── hooks/
+│   ├── useSettings.ts           # Settings hook
+│   └── useOpenAI.ts             # OpenAI hook
+├── store/
+│   └── settingsStore.ts         # Zustand store
+└── public/
+    ├── icon-16.png
+    ├── icon-48.png
+    └── icon-128.png
+```
+
+---
+
+## 🔧 CONFIGURATION FILES
+
+### 1. wxt.config.ts
+
+```typescript
+import { defineConfig } from 'wxt';
+
+export default defineConfig({
+  manifest: {
+    name: 'WhatsApp AI Assistant',
+    description: 'AI-powered response suggestions for WhatsApp Web',
+    version: '1.0.0',
+    permissions: ['storage', 'activeTab'],
+    host_permissions: ['https://web.whatsapp.com/*'],
+  },
+  modules: ['@wxt-dev/module-react'],
+});
+```
+
+### 2. tailwind.config.js
+
+```javascript
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    './entrypoints/**/*.{ts,tsx,html}',
+    './components/**/*.{ts,tsx}',
+  ],
+  theme: {
+    extend: {
+      colors: {
+        whatsapp: {
+          green: '#25D366',
+          dark: '#075E54',
+          light: '#DCF8C6',
+        },
+      },
+    },
+  },
+  plugins: [],
+};
+```
+
+---
+
+## 📋 TYPE DEFINITIONS
+
+### lib/types.ts
+
+```typescript
+export interface Settings {
+  apiKey: string;
+  model: 'gpt-3.5-turbo' | 'gpt-4' | 'gpt-4-turbo';
+  language: 'en' | 'ur' | 'mixed';
+  isEnabled: boolean;
+  tone: 'professional' | 'friendly' | 'balanced';
+}
+
+export interface Message {
+  id: string;
+  sender: string;
+  text: string;
+  timestamp: Date;
+  isIncoming: boolean;
+}
+
+export interface Suggestion {
+  id: string;
+  type: 'professional' | 'friendly' | 'quick';
+  text: string;
+  icon: string;
+}
+
+export interface ChatContext {
+  senderName: string;
+  currentMessage: string;
+  previousMessages: string[];
+}
+
+export interface APIResponse {
+  suggestions: Suggestion[];
+  error?: string;
+}
+```
+
+---
+
+## 🎨 COMPONENTS
+
+### 1. components/SuggestionCard.tsx
+
+```typescript
+import React from 'react';
+import { Copy, Send, Loader2 } from 'lucide-react';
+import type { Suggestion } from '@/lib/types';
+
+interface SuggestionCardProps {
+  suggestion: Suggestion | null;
+  loading?: boolean;
+  onCopy: (text: string) => void;
+  onInsert: (text: string) => void;
+}
+
+export const SuggestionCard: React.FC<SuggestionCardProps> = ({
+  suggestion,
+  loading,
+  onCopy,
+  onInsert,
+}) => {
+  if (loading) {
+    return (
+      <div className="bg-gray-50 rounded-lg p-4 mb-3">
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="w-6 h-6 animate-spin text-whatsapp-green" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!suggestion) return null;
+
+  const icons = {
+    professional: '🎯',
+    friendly: '😊',
+    quick: '⚡',
+  };
+
+  return (
+    <div className="bg-gray-50 rounded-lg p-4 mb-3 hover:bg-gray-100 transition-colors">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xl">{icons[suggestion.type]}</span>
+        <span className="font-medium text-sm capitalize">{suggestion.type}</span>
+      </div>
+      <p className="text-sm text-gray-700 mb-3 leading-relaxed">{suggestion.text}</p>
+      <div className="flex gap-2">
+        <button
+          onClick={() => onCopy(suggestion.text)}
+          className="flex items-center gap-1 px-3 py-1.5 bg-whatsapp-green text-white rounded-md text-xs font-medium hover:bg-whatsapp-dark transition-colors"
+        >
+          <Copy size={14} />
+          Copy
+        </button>
+        <button
+          onClick={() => onInsert(suggestion.text)}
+          className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-md text-xs font-medium hover:bg-gray-50 transition-colors"
+        >
+          <Send size={14} />
+          Insert
+        </button>
+      </div>
+    </div>
+  );
+};
+```
+
+### 2. components/SettingsForm.tsx
+
+```typescript
+import React, { useState } from 'react';
+import { Save, Eye, EyeOff, CheckCircle, XCircle } from 'lucide-react';
+import type { Settings } from '@/lib/types';
+
+interface SettingsFormProps {
+  settings: Settings;
+  onSave: (settings: Settings) => Promise<void>;
+  onTest: (apiKey: string) => Promise<boolean>;
+}
+
+export const SettingsForm: React.FC<SettingsFormProps> = ({
+  settings,
+  onSave,
+  onTest,
+}) => {
+  const [form, setForm] = useState<Settings>(settings);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<boolean | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const handleTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+    const result = await onTest(form.apiKey);
+    setTestResult(result);
+    setTesting(false);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    await onSave(form);
+    setSaving(false);
+  };
+
+  return (
+    <div className="p-4 space-y-4">
+      {/* Extension Status */}
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium">Extension Status</span>
+        <button
+          onClick={() => setForm({ ...form, isEnabled: !form.isEnabled })}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+            form.isEnabled ? 'bg-whatsapp-green' : 'bg-gray-300'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+              form.isEnabled ? 'translate-x-6' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </div>
+
+      {/* API Key */}
+      <div>
+        <label className="block text-sm font-medium mb-1">OpenAI API Key</label>
+        <div className="relative">
+          <input
+            type={showApiKey ? 'text' : 'password'}
+            value={form.apiKey}
+            onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
+            placeholder="sk-..."
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm pr-20"
+          />
+          <button
+            onClick={() => setShowApiKey(!showApiKey)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500"
+          >
+            {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        </div>
+        <button
+          onClick={handleTest}
+          disabled={!form.apiKey || testing}
+          className="mt-2 text-xs text-whatsapp-green hover:underline disabled:text-gray-400"
+        >
+          {testing ? 'Testing...' : 'Test Connection'}
+        </button>
+        {testResult !== null && (
+          <div className={`flex items-center gap-1 mt-1 text-xs ${testResult ? 'text-green-600' : 'text-red-600'}`}>
+            {testResult ? <CheckCircle size={14} /> : <XCircle size={14} />}
+            {testResult ? 'API key is valid' : 'Invalid API key'}
+          </div>
+        )}
+      </div>
+
+      {/* Model Selection */}
+      <div>
+        <label className="block text-sm font-medium mb-1">AI Model</label>
+        <select
+          value={form.model}
+          onChange={(e) => setForm({ ...form, model: e.target.value as Settings['model'] })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+        >
+          <option value="gpt-3.5-turbo">GPT-3.5 Turbo (Fast & Cheap)</option>
+          <option value="gpt-4">GPT-4 (Better Quality)</option>
+          <option value="gpt-4-turbo">GPT-4 Turbo (Best Balance)</option>
+        </select>
+      </div>
+
+      {/* Language */}
+      <div>
+        <label className="block text-sm font-medium mb-1">Language</label>
+        <select
+          value={form.language}
+          onChange={(e) => setForm({ ...form, language: e.target.value as Settings['language'] })}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+        >
+          <option value="en">English</option>
+          <option value="ur">Urdu</option>
+          <option value="mixed">Mixed (English + Urdu)</option>
+        </select>
+      </div>
+
+      {/* Save Button */}
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-whatsapp-green text-white rounded-md font-medium hover:bg-whatsapp-dark transition-colors disabled:bg-gray-400"
+      >
+        <Save size={16} />
+        {saving ? 'Saving...' : 'Save Settings'}
+      </button>
+
+      {/* Privacy Notice */}
+      <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3 text-xs text-gray-700">
+        ⚠️ <strong>Privacy Notice:</strong> Messages are sent to OpenAI for AI processing using your API key. 
+        Don't use for highly confidential conversations.
+      </div>
+    </div>
+  );
+};
+```
+
+---
+
+## 🔌 ENTRYPOINTS
+
+### 1. entrypoints/popup/App.tsx
+
+```typescript
+import React, { useEffect, useState } from 'react';
+import { SettingsForm } from '@/components/SettingsForm';
+import { getSettings, saveSettings } from '@/lib/storage';
+import { testAPIKey } from '@/lib/openai';
+import type { Settings } from '@/lib/types';
+import './style.css';
+
+export default function App() {
+  const [settings, setSettings] = useState<Settings | null>(null);
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    const data = await getSettings();
+    setSettings(data);
+  };
+
+  const handleSave = async (newSettings: Settings) => {
+    await saveSettings(newSettings);
+    setSettings(newSettings);
+    // Show success message
+    const badge = document.createElement('div');
+    badge.textContent = '✓ Saved successfully';
+    badge.className = 'fixed top-2 right-2 bg-green-500 text-white px-3 py-1 rounded text-sm';
+    document.body.appendChild(badge);
+    setTimeout(() => badge.remove(), 2000);
+  };
+
+  if (!settings) {
+    return (
+      <div className="w-80 h-96 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-whatsapp-green"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-80 max-h-[600px] overflow-y-auto">
+      <div className="bg-whatsapp-green text-white p-4">
+        <h1 className="text-lg font-bold">💬 WhatsApp AI Assistant</h1>
+        <p className="text-xs opacity-90 mt-1">Configure your AI-powered suggestions</p>
+      </div>
+      <SettingsForm settings={settings} onSave={handleSave} onTest={testAPIKey} />
+    </div>
+  );
+}
+```
+
+### 2. entrypoints/content/index.ts
+
+```typescript
+import { defineContentScript } from 'wxt/sandbox';
+import { detectNewMessage, extractMessageData, insertTextToWhatsApp } from '@/lib/whatsapp';
+import { getSettings } from '@/lib/storage';
+
+export default defineContentScript({
+  matches: ['https://web.whatsapp.com/*'],
+  cssInjectionMode: 'ui',
+  
+  async main(ctx) {
+    console.log('WhatsApp AI Assistant: Content script loaded');
+
+    // Wait for WhatsApp to load
+    await waitForWhatsAppLoad();
+
+    // Check if extension is enabled
+    const settings = await getSettings();
+    if (!settings.isEnabled) {
+      console.log('Extension is disabled');
+      return;
+    }
+
+    // Create and mount sidebar UI
+    const ui = await createSidebarUI(ctx);
+
+    // Start observing for new messages
+    observeMessages(ui);
+  },
+});
+
+function waitForWhatsAppLoad(): Promise<void> {
+  return new Promise((resolve) => {
+    const checkInterval = setInterval(() => {
+      const chatContainer = document.querySelector('[data-testid="conversation-panel-body"]');
+      if (chatContainer) {
+        clearInterval(checkInterval);
+        resolve();
+      }
+    }, 500);
+  });
+}
+
+async function createSidebarUI(ctx: any) {
+  // Dynamic import of React component
+  const { createShadowRootUi } = await import('wxt/client');
+  const { default: Sidebar } = await import('./sidebar');
+
+  return createShadowRootUi(ctx, {
+    name: 'whatsapp-ai-sidebar',
+    position: 'inline',
+    anchor: 'body',
+    append: 'last',
+    onMount: (container) => {
+      // Mount React component
+      const root = container.querySelector('#root');
+      if (root) {
+        import('react-dom/client').then(({ createRoot }) => {
+          createRoot(root).render(<Sidebar />);
+        });
+      }
+    },
+  });
+}
+
+function observeMessages(ui: any) {
+  const chatContainer = document.querySelector('[data-testid="conversation-panel-body"]');
+  if (!chatContainer) return;
+
+  let debounceTimer: NodeJS.Timeout;
+
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      mutation.addedNodes.forEach((node) => {
+        if (node instanceof HTMLElement && detectNewMessage(node)) {
+          // Debounce: wait 2 seconds before processing
+          clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(async () => {
+            const messageData = extractMessageData();
+            if (messageData) {
+              // Send to background script for AI processing
+              const response = await browser.runtime.sendMessage({
+                action: 'generateSuggestions',
+                data: messageData,
+              });
+              
+              // Update sidebar with suggestions
+              ui.updateSuggestions(response.suggestions);
+            }
+          }, 2000);
+        }
+      });
+    });
+  });
+
+  observer.observe(chatContainer, {
+    childList: true,
+    subtree: true,
+  });
+}
+```
+
+### 3. entrypoints/content/sidebar.tsx
+
+```typescript
+import React, { useState, useEffect } from 'react';
+import { X, RefreshCw } from 'lucide-react';
+import { SuggestionCard } from '@/components/SuggestionCard';
+import { insertTextToWhatsApp } from '@/lib/whatsapp';
+import type { Suggestion } from '@/lib/types';
+
+export default function Sidebar() {
+  const [visible, setVisible] = useState(false);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [lastMessage, setLastMessage] = useState('');
+
+  useEffect(() => {
+    // Listen for messages from content script
+    browser.runtime.onMessage.addListener((message) => {
+      if (message.action === 'showSuggestions') {
+        setSuggestions(message.suggestions);
+        setLastMessage(message.message);
+        setVisible(true);
+        setLoading(false);
+      } else if (message.action === 'loading') {
+        setLoading(true);
+        setVisible(true);
+      }
+    });
+  }, []);
+
+  const handleCopy = async (text: string) => {
+    await navigator.clipboard.writeText(text);
+    // Show feedback
+    alert('Copied to clipboard!');
+  };
+
+  const handleInsert = (text: string) => {
+    insertTextToWhatsApp(text);
+  };
+
+  const handleRegenerate = async () => {
+    setLoading(true);
+    // Send request to background script
+    browser.runtime.sendMessage({ action: 'regenerate' });
+  };
+
+  if (!visible) return null;
+
+  return (
+    <div className="fixed right-0 top-0 w-[350px] h-screen bg-white shadow-2xl z-[9999] flex flex-col animate-slide-in">
+      {/* Header */}
+      <div className="bg-whatsapp-green text-white p-4 flex items-center justify-between">
+        <h2 className="text-lg font-bold">💬 AI Suggestions</h2>
+        <button
+          onClick={() => setVisible(false)}
+          className="hover:bg-whatsapp-dark p-1 rounded transition-colors"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto p-4">
+        {/* Last Message Preview */}
+        <div className="bg-gray-100 rounded-lg p-3 mb-4">
+          <p className="text-xs font-medium text-gray-600 mb-1">Last Message:</p>
+          <p className="text-sm text-gray-800">{lastMessage || 'Waiting for messages...'}</p>
+        </div>
+
+        {/* Suggestions */}
+        <div className="space-y-3">
+          {loading ? (
+            <>
+              <SuggestionCard suggestion={null} loading onCopy={() => {}} onInsert={() => {}} />
+              <SuggestionCard suggestion={null} loading onCopy={() => {}} onInsert={() => {}} />
+              <SuggestionCard suggestion={null} loading onCopy={() => {}} onInsert={() => {}} />
+            </>
+          ) : suggestions.length > 0 ? (
+            suggestions.map((suggestion) => (
+              <SuggestionCard
+                key={suggestion.id}
+                suggestion={suggestion}
+                onCopy={handleCopy}
+                onInsert={handleInsert}
+              />
+            ))
+          ) : (
+            <div className="text-center py-8 text-gray-500 text-sm">
+              No suggestions yet. Waiting for incoming messages...
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="p-4 border-t border-gray-200">
+        <button
+          onClick={handleRegenerate}
+          disabled={loading || suggestions.length === 0}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-md font-medium hover:bg-gray-200 transition-colors disabled:bg-gray-50 disabled:text-gray-400"
+        >
+          <RefreshCw size={16} />
+          Regenerate
+        </button>
+      </div>
+    </div>
+  );
+}
+```
+
+### 4. entrypoints/background.ts
+
+```typescript
+import { defineBackground } from 'wxt/sandbox';
+import OpenAI from 'openai';
+import { getSettings } from '@/lib/storage';
+import type { ChatContext, Suggestion } from '@/lib/types';
+
+export default defineBackground({
+  type: 'module',
+  
+  main() {
+    console.log('WhatsApp AI Assistant: Background script loaded');
+
+    // Listen for messages from content script
+    browser.runtime.onMessage.addListener(async (message, sender) => {
+      if (message.action === 'generateSuggestions') {
+        return await generateSuggestions(message.data);
+      }
+      
+      if (message.action === 'regenerate') {
+        // Get last context from storage and regenerate
+        const lastContext = await getLastContext();
+        if (lastContext) {
+          return await generateSuggestions(lastContext);
+        }
+      }
+    });
+  },
+});
+
+async function generateSuggestions(context: ChatContext) {
+  try {
+    const settings = await getSettings();
+    
+    if (!settings.apiKey) {
+      return {
+        error: 'API key not configured. Please add your OpenAI API key in settings.',
+        suggestions: [],
+      };
+    }
+
+    const openai = new OpenAI({
+      apiKey: settings.apiKey,
+      dangerouslyAllowBrowser: true, // For extension usage
+    });
+
+    const systemPrompt = getSystemPrompt(settings.language);
+    const userPrompt = formatUserPrompt(context);
+
+    const response = await openai.chat.completions.create({
+      model: settings.model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: 0.7,
+      max_tokens: 500,
+    });
+
+    const aiResponse = response.choices[0]?.message?.content || '';
+    const suggestions = parseAIResponse(aiResponse);
+
+    // Save context for regeneration
+    await saveLastContext(context);
+
+    return { suggestions, error: null };
+  } catch (error: any) {
+    console.error('OpenAI API error:', error);
+    return {
+      error: formatError(error),
+      suggestions: [],
+    };
+  }
+}
+
+function getSystemPrompt(language: string): string {
+  const prompts = {
+    en: "You are a professional communication assistant for a freelancer communicating with clients on WhatsApp. Generate 3 different response suggestions with these tones: 1) PROFESSIONAL (formal and business-like), 2) FRIENDLY (warm and approachable), 3) QUICK (brief and to-the-point). Keep all responses concise (2-3 sentences max). Focus on clear, helpful communication.",
+    
+    ur: "آپ ایک فری لانسر کے لیے پروفیشنل کمیونیکیشن اسسٹنٹ ہیں جو واٹس ایپ پر کلائنٹس سے بات کر رہا ہے۔ 3 مختلف جوابات تیار کریں: 1) PROFESSIONAL (رسمی اور بزنس لائق), 2) FRIENDLY (دوستانہ اور گرمجوش), 3) QUICK (مختصر اور واضح)۔ سب جوابات مختصر رکھیں (2-3 جملے)۔",
+    
+    mixed: "You are a professional communication assistant. Generate 3 response suggestions in a mix of English and Urdu (Roman Urdu is acceptable). Tones: 1) PROFESSIONAL (formal), 2) FRIENDLY (warm), 3) QUICK (brief). Keep responses concise (2-3 sentences).",
+  };
+
+  return prompts[language as keyof typeof prompts] || prompts.en;
+}
+
+function formatUserPrompt(context: ChatContext): string {
+  const contextStr = context.previousMessages.length > 0
+    ? `Previous conversation:\n${context.previousMessages.join('\n')}\n\n`
+    : '';
+
+  return `${contextStr}Client (${context.senderName}) just sent: "${context.currentMessage}"
+
+Generate 3 response options in this EXACT format:
+
+1. PROFESSIONAL:
+[Your professional response here]
+
+2. FRIENDLY:
+[Your friendly response here]
+
+3. QUICK:
+[Your quick response here]`;
+}
+
+function parseAIResponse(response: string): Suggestion[] {
+  const suggestions: Suggestion[] = [];
+  
+  // Parse professional suggestion
+  const professionalMatch = response.match(/1\.\s*PROFESSIONAL:\s*\n([\s\S]*?)(?=\n2\.|$)/i);
+  if (professionalMatch) {
+    suggestions.push({
+      id: '1',
+      type: 'professional',
+      text: professionalMatch[1].trim(),
+      icon: '🎯',
+    });
+  }
+
+  // Parse friendly suggestion
+  const friendlyMatch = response.match(/2\.\s*FRIENDLY:\s*\n([\s\S]*?)(?=\n3\.|$)/i);
+  if (friendlyMatch) {
+    suggestions.push({
+      id: '2',
+      type: 'friendly',
+      text: friendlyMatch[1].trim(),
+      icon: '😊',
+    });
+  }
+
+  // Parse quick suggestion
+  const quickMatch = response.match(/3\.\s*QUICK:\s*\n([\s\S]*?)$/i);
+  if (quickMatch) {
+    suggestions.push({
+      id: '3',
+      type: 'quick',
+      text: quickMatch[1].trim(),
+      icon: '⚡',
+    });
+  }
+
+  return suggestions;
+}
+
+function formatError(error: any): string {
+  if (error.status === 401) return 'Invalid API key. Please check your settings.';
+  if (error.status === 429) return 'Rate limit exceeded. Please wait a moment.';
+  if (error.status === 500) return 'OpenAI service error. Please try again.';
+  return 'Failed to generate suggestions. Please try again.';
+}
+
+async function saveLastContext(context: ChatContext) {
+  await browser.storage.local.set({ lastContext: context });
+}
+
+async function getLastContext(): Promise<ChatContext | null> {
+  const result = await browser.storage.local.get('lastContext');
+  return result.lastContext || null;
+}
+```
+
+---
+
+## 🛠️ UTILITY FUNCTIONS
+
+### lib/storage.ts
+
+```typescript
+import type { Settings } from './types';
+
+const DEFAULT_SETTINGS: Settings = {
+  apiKey: '',
+  model: 'gpt-3.5-turbo',
+  language: 'en',
+  isEnabled: true,
+  tone: 'balanced',
+};
+
+export async function getSettings(): Promise<Settings> {
+  const result = await browser.storage.local.get('settings');
+  return { ...DEFAULT_SETTINGS, ...result.settings };
+}
+
+export async function saveSettings(settings: Settings): Promise<void> {
+  await browser.storage.local.set({ settings });
+}
+
+export async function isExtensionEnabled(): Promise<boolean> {
+  const settings = await getSettings();
+  return settings.isEnabled;
+}
+```
+
+### lib/whatsapp.ts
+
+```typescript
+import type { ChatContext } from './types';
+
+export function detectNewMessage(node: HTMLElement): boolean {
+  // Check if the node is an incoming message bubble
+  return (
+    node.classList.contains('message-in') ||
+    node.querySelector('[data-testid="msg-container"]') !== null
+  );
+}
+
+export function extractMessageData(): ChatContext | null {
+  try {
+    // Get sender name from chat header
+    const headerElement = document.querySelector('[data-testid="conversation-header"]');
+    const senderName = headerElement?.querySelector('[dir="auto"]')?.textContent || 'Client';
+
+    // Get current message (last incoming message)
+    const messages = document.querySelectorAll('[data-testid="msg-container"]');
+    const lastMessage = Array.from(messages)
+      .reverse()
+      .find((msg) => msg.closest('.message-in'));
+
+    if (!lastMessage) return null;
+
+    const messageText = lastMessage.querySelector('.selectable-text')?.textContent || '';
+    if (!messageText.trim()) return null;
+
+    // Get previous messages for context (last 5 messages)
+    const allMessages = Array.from(messages)
+      .slice(-6, -1)
+      .map((msg) => msg.querySelector('.selectable-text')?.textContent || '')
+      .filter(Boolean);
+
+    return {
+      senderName,
+      currentMessage: messageText,
+      previousMessages: allMessages,
+    };
+  } catch (error) {
+    console.error('Error extracting message data:', error);
+    return null;
+  }
+}
+
+export function insertTextToWhatsApp(text: string): void {
+  const inputField = document.querySelector<HTMLDivElement>(
+    'div[contenteditable="true"][data-tab="10"]'
+  );
+
+  if (!inputField) {
+    console.error('WhatsApp input field not found');
+    return;
+  }
+
+  // Focus the input field
+  inputField.focus();
+
+  // Method 1: Using execCommand (most reliable for WhatsApp)
+  document.execCommand('insertText', false, text);
+
+  // Method 2: Fallback if execCommand doesn't work
+  if (!inputField.textContent) {
+    inputField.textContent = text;
+    
+    // Trigger input event to update WhatsApp's state
+    const inputEvent = new InputEvent('input', {
+      bubbles: true,
+      cancelable: true,
+    });
+    inputField.dispatchEvent(inputEvent);
+  }
+
+  // Keep focus on input field
+  inputField.focus();
+}
+
+export function getWhatsAppInputField(): HTMLDivElement | null {
+  return document.querySelector('div[contenteditable="true"][data-tab="10"]');
+}
+```
+
+### lib/openai.ts
+
+```typescript
+import OpenAI from 'openai';
+
+export async function testAPIKey(apiKey: string): Promise<boolean> {
+  if (!apiKey || !apiKey.startsWith('sk-')) {
+    return false;
+  }
+
+  try {
+    const openai = new OpenAI({
+      apiKey,
+      dangerouslyAllowBrowser: true,
+    });
+
+    // Simple test call to verify API key
+    await openai.models.list();
+    return true;
+  } catch (error) {
+    console.error('API key test failed:', error);
+    return false;
+  }
+}
+
+export function validateAPIKey(apiKey: string): boolean {
+  return apiKey.startsWith('sk-') && apiKey.length > 20;
+}
+```
+
+---
+
+## 🎨 STYLING
+
+### entrypoints/popup/style.css
+
+```css
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+```
+
+### entrypoints/content.css
+
+```css
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+/* Sidebar slide-in animation */
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
+}
+
+/* Custom scrollbar for sidebar */
+.overflow-y-auto::-webkit-scrollbar {
+  width: 6px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 3px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+```
+
+---
+
+## 📦 PACKAGE.JSON SCRIPTS
+
+```json
+{
+  "scripts": {
+    "dev": "wxt",
+    "dev:firefox": "wxt -b firefox",
+    "build": "wxt build",
+    "build:firefox": "wxt build -b firefox",
+    "zip": "wxt zip",
+    "zip:firefox": "wxt zip -b firefox",
+    "compile": "tsc --noEmit",
+    "postinstall": "wxt prepare"
+  }
+}
+```
+
+---
+
+## 🧪 TESTING CHECKLIST
+
+### Manual Testing Steps:
+
+1. **Extension Installation**
+   ```bash
+   npm run dev
+   # Opens Chrome with extension loaded
+   ```
+
+2. **Settings Page**
+   - [ ] Click extension icon
+   - [ ] Settings popup opens
+   - [ ] Can enter API key
+   - [ ] "Test Connection" validates key
+   - [ ] Can toggle extension on/off
+   - [ ] Can select AI model
+   - [ ] Can change language
+   - [ ] Settings persist after closing
+
+3. **WhatsApp Web Integration**
+   - [ ] Open https://web.whatsapp.com
+   - [ ] Sidebar doesn't appear initially
+   - [ ] Send test message to yourself
+   - [ ] Sidebar slides in from right
+   - [ ] Shows "Generating..." state
+
+4. **AI Suggestions**
+   - [ ] 3 suggestions appear after ~3 seconds
+   - [ ] Professional suggestion is formal
+   - [ ] Friendly suggestion is warm
+   - [ ] Quick suggestion is brief
+   - [ ] Suggestions are relevant to message
+
+5. **Interactions**
+   - [ ] "Copy" button copies to clipboard
+   - [ ] Shows "Copied!" feedback
+   - [ ] "Insert" button adds text to WhatsApp input
+   - [ ] Text appears in WhatsApp input field
+   - [ ] Can edit inserted text
+   - [ ] Must manually click send (no auto-send)
+
+6. **Error Handling**
+   - [ ] Missing API key shows error
+   - [ ] Invalid API key shows error
+   - [ ] Network offline shows error
+   - [ ] Rate limit shows friendly message
+   - [ ] Errors don't crash extension
+
+7. **Performance**
+   - [ ] Sidebar loads in < 500ms
+   - [ ] AI response in < 5 seconds
+   - [ ] No lag while typing in WhatsApp
+   - [ ] Memory usage < 50MB
+
+8. **Edge Cases**
+   - [ ] Multiple rapid messages (debouncing works)
+   - [ ] Image/video messages (skipped)
+   - [ ] Voice messages (skipped)
+   - [ ] Group chats (works)
+   - [ ] Multiple WhatsApp tabs (works)
+   - [ ] Page refresh (extension reloads)
+
+---
+
+## 🚀 BUILD & DEPLOYMENT
+
+### Development Build
+```bash
+# Start dev server with hot reload
+npm run dev
+
+# Test in Chrome (default)
+# Extension auto-reloads on file changes
+```
+
+### Production Build
+```bash
+# Build for Chrome
+npm run build
+
+# Build for Firefox
+npm run build:firefox
+
+# Create ZIP for Chrome Web Store
+npm run zip
+
+# Output: .output/chrome-mv3.zip
+```
+
+### Chrome Web Store Submission
+1. Build production version: `npm run zip`
+2. Go to [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole)
+3. Upload `.output/chrome-mv3.zip`
+4. Fill in store listing:
+   - Name: WhatsApp AI Assistant
+   - Description: AI-powered response suggestions for WhatsApp Web
+   - Category: Productivity
+   - Screenshots: Sidebar UI, settings page
+   - Privacy policy: Required (mention OpenAI usage)
+
+---
+
+## 🔒 SECURITY BEST PRACTICES
+
+### Implemented Security Features:
+
+1. **API Key Storage**
+   - Stored in `chrome.storage.local` (encrypted by Chrome)
+   - Never logged or exposed in console
+   - Not sent to any server except OpenAI
+
+2. **Content Security Policy**
+   - No inline scripts
+   - No eval() usage
+   - HTTPS-only external requests
+
+3. **Sensitive Data Detection**
+   ```typescript
+   function containsSensitiveData(text: string): boolean {
+     const keywords = ['password', 'otp', 'pin', 'credit card', 'cvv', 'ssn'];
+     return keywords.some(kw => text.toLowerCase().includes(kw));
+   }
+   ```
+
+4. **Rate Limiting**
+   ```typescript
+   let requestCount = 0;
+   let resetTime = Date.now() + 60000;
+
+   function checkRateLimit(): boolean {
+     if (Date.now() > resetTime) {
+       requestCount = 0;
+       resetTime = Date.now() + 60000;
+     }
+     
+     if (requestCount >= 30) {
+       return false; // Limit exceeded
+     }
+     
+     requestCount++;
+     return true;
+   }
+   ```
+
+---
+
+## 📚 DOCUMENTATION
+
+### README.md Structure
+
+```markdown
+# WhatsApp AI Assistant
+
+AI-powered response suggestions for WhatsApp Web using OpenAI.
+
+## Features
+- 🤖 Real-time AI suggestions
+- 🎯 3 tone options (Professional, Friendly, Quick)
+- 🔒 Privacy-focused (your API key, your data)
+- ⚡ Fast & lightweight
+- 🎨 Clean, modern UI
+
+## Installation
+
+### For Development
+1. Clone repository
+2. Install dependencies: `npm install`
+3. Start dev server: `npm run dev`
+4. Open Chrome and test
+
+### For Users
+1. Install from Chrome Web Store
+2. Get OpenAI API key from https://platform.openai.com
+3. Click extension icon and configure
+4. Open WhatsApp Web and start chatting!
+
+## Usage
+1. Open WhatsApp Web
+2. Receive a message
+3. Sidebar appears with 3 AI suggestions
+4. Click "Copy" or "Insert"
+5. Review and send
+
+## Privacy
+- Messages sent to OpenAI using YOUR API key
+- No data collected by extension
+- No tracking or analytics
+- Source code available for review
+
+## Cost
+- Free extension
+- OpenAI API costs: ~$0.001 per suggestion
+- Approximately $1 for 1000 suggestions
+
+## Support
+- Issues: GitHub Issues
+- Email: your@email.com
+
+## License
+MIT
+```
+
+---
+
+## 💡 BEST PRACTICES & TIPS
+
+### 1. TypeScript Advantages
+```typescript
+// Type safety catches errors early
+const settings: Settings = await getSettings();
+settings.apiKey // ✅ TypeScript knows this exists
+settings.invalidProp // ❌ TypeScript error
+
+// Intellisense in VS Code
+suggestions.map(s => s.text) // Auto-complete works!
+```
+
+### 2. React Best Practices
+```typescript
+// Use proper hooks
+const [loading, setLoading] = useState(false);
+const [error, setError] = useState<string | null>(null);
+
+// Cleanup effects
+useEffect(() => {
+  const listener = (msg) => handleMessage(msg);
+  browser.runtime.onMessage.addListener(listener);
+  
+  return () => {
+    browser.runtime.onMessage.removeListener(listener);
+  };
+}, []);
+```
+
+### 3. Error Boundaries (Future Enhancement)
+```typescript
+class ErrorBoundary extends React.Component {
+  componentDidCatch(error: Error) {
+    console.error('Extension error:', error);
+    // Show user-friendly error UI
+  }
+}
+```
+
+### 4. Performance Optimization
+```typescript
+// Debounce API calls
+const debounce = (fn: Function, delay: number) => {
+  let timer: NodeJS.Timeout;
+  return (...args: any[]) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
+  };
+};
+
+// Memoize expensive computations
+const memoizedSuggestions = useMemo(() => {
+  return parseSuggestions(aiResponse);
+}, [aiResponse]);
+```
+
+---
+
+## 🎯 ACCEPTANCE CRITERIA
+
+The extension is complete when:
+
+- ✅ Installs without errors in Chrome
+- ✅ Settings page functional (save/load works)
+- ✅ API key validation works
+- ✅ Detects WhatsApp messages in real-time
+- ✅ Calls OpenAI API correctly
+- ✅ Displays 3 relevant suggestions
+- ✅ Copy button works (clipboard + feedback)
+- ✅ Insert button works (text in WhatsApp input)
+- ✅ Close/regenerate buttons functional
+- ✅ Error handling graceful
+- ✅ No console errors
+- ✅ TypeScript compiles without errors
+- ✅ UI is responsive and polished
+- ✅ Performance smooth (no lag)
+- ✅ Works on WhatsApp Web without breaking UI
+
+---
+
+## 🐛 COMMON ISSUES & SOLUTIONS
+
+### Issue 1: "Module not found" errors
+```bash
+# Solution: Install missing dependencies
+npm install
+npm run prepare # Regenerates WXT types
+```
+
+### Issue 2: Extension doesn't load
+```bash
+# Solution: Check manifest and rebuild
+npm run build
+# Then reload extension in chrome://extensions
+```
+
+### Issue 3: Sidebar doesn't appear
+```typescript
+// Solution: Check WhatsApp selectors
+console.log(document.querySelector('[data-testid="conversation-panel-body"]'));
+// If null, WhatsApp UI changed - update selectors
+```
+
+### Issue 4: OpenAI API errors
+```typescript
+// Solution: Check API key and model availability
+const testKey = async () => {
+  const openai = new OpenAI({ apiKey: 'your-key' });
+  const models = await openai.models.list();
+  console.log(models); // Should list available models
+};
+```
+
+---
+
+## 📈 FUTURE ENHANCEMENTS
+
+### V1.1 Features
+- [ ] Custom prompt templates
+- [ ] Conversation history context (last 20 messages)
+- [ ] Keyboard shortcuts (Ctrl+1/2/3 for suggestions)
+- [ ] Dark mode support
+
+### V1.2 Features
+- [ ] Multi-language translation
+- [ ] Voice message transcription
+- [ ] Sentiment analysis
+- [ ] Response tone customization
+
+### V2.0 Features
+- [ ] Local AI model option (privacy mode)
+- [ ] Firefox/Edge support
+- [ ] Analytics dashboard
+- [ ] Team collaboration features
+
+---
+
+## 🎓 LEARNING RESOURCES
+
+- [WXT Documentation](https://wxt.dev)
+- [Chrome Extension API](https://developer.chrome.com/docs/extensions)
+- [OpenAI API Reference](https://platform.openai.com/docs)
+- [React Documentation](https://react.dev)
+- [TypeScript Handbook](https://www.typescriptlang.org/docs)
+
+---
+
+**NOW START BUILDING!**
+
+Generate all files with complete, production-ready TypeScript + React code.
+
+Use WXT's modern patterns and best practices.
+
+Focus on clean, maintainable, type-safe code.
