@@ -7,6 +7,10 @@ export default defineConfig({
     version: '1.0.0',
     permissions: ['storage', 'activeTab'],
     host_permissions: ['https://web.whatsapp.com/*'],
+    action: {
+      default_popup: 'popup.html',
+      default_title: 'WhatsApp AI Assistant',
+    },
   },
   modules: ['@wxt-dev/module-react'],
 });

@@ -1,33 +1,41 @@
-import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
-import { X, RefreshCw } from 'lucide-react';
+import { X, RefreshCw, AlertCircle } from 'lucide-react';
 import { SuggestionCard } from '@/components/SuggestionCard';
 import { insertTextToWhatsApp } from '@/lib/whatsapp';
 import type { Suggestion } from '@/lib/types';
+import '../content.css';
 
-interface SidebarHandle {
-  update: (action: string, data: any) => void;
-}
+// Global update function that will be set by the sidebar component
+let sidebarUpdateFn: ((action: string, data: any) => void) | null = null;
 
-const Sidebar = forwardRef<SidebarHandle>((_props, ref) => {
+function Sidebar() {
   const [visible, setVisible] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastMessage, setLastMessage] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
-  useImperativeHandle(ref, () => ({
-    update: (action: string, data: any) => {
+  // Set up the update function
+  useEffect(() => {
+    sidebarUpdateFn = (action: string, data: any) => {
       if (action === 'showSuggestions') {
         setSuggestions(data.suggestions || []);
         setLastMessage(data.message || '');
         setVisible(true);
         setLoading(false);
+        setError(data.error || null);
       } else if (action === 'loading') {
         setLoading(true);
         setVisible(true);
+        setError(null);
       }
-    },
-  }));
+    };
+
+    return () => {
+      sidebarUpdateFn = null;
+    };
+  }, []);
 
   useEffect(() => {
     // Also listen for messages from background script (for regeneration)
@@ -104,6 +112,17 @@ const Sidebar = forwardRef<SidebarHandle>((_props, ref) => {
           <p className="text-sm text-gray-800">{lastMessage || 'Waiting for messages...'}</p>
         </div>
 
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 flex items-start gap-2">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-red-800">Error</p>
+              <p className="text-xs text-red-600 mt-1">{error}</p>
+            </div>
+          </div>
+        )}
+
         {/* Suggestions */}
         <div className="space-y-3">
           {loading ? (
@@ -121,11 +140,11 @@ const Sidebar = forwardRef<SidebarHandle>((_props, ref) => {
                 onInsert={handleInsert}
               />
             ))
-          ) : (
+          ) : !error ? (
             <div className="text-center py-8 text-gray-500 text-sm">
               No suggestions yet. Waiting for incoming messages...
             </div>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -144,19 +163,17 @@ const Sidebar = forwardRef<SidebarHandle>((_props, ref) => {
   );
 });
 
-Sidebar.displayName = 'Sidebar';
-
 // Export function to mount sidebar
 export function mountSidebar(container: HTMLElement) {
   const root = createRoot(container);
-  const ref = React.createRef<SidebarHandle>();
-  root.render(<Sidebar ref={ref} />);
+  root.render(<Sidebar />);
   
+  // Return update function that uses the global reference
   return {
     root,
     update: (action: string, data: any) => {
-      if (ref.current) {
-        ref.current.update(action, data);
+      if (sidebarUpdateFn) {
+        sidebarUpdateFn(action, data);
       }
     },
   };

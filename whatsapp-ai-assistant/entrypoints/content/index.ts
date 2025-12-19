@@ -100,14 +100,16 @@ function observeMessages() {
                   updateSidebar('showSuggestions', {
                     suggestions: response.suggestions || [],
                     message: messageData.currentMessage,
+                    error: response.error || null,
                   });
                 }
-              } catch (error) {
+              } catch (error: any) {
                 console.error('Error generating suggestions:', error);
                 if (updateSidebar) {
                   updateSidebar('showSuggestions', {
                     suggestions: [],
                     message: messageData.currentMessage,
+                    error: error.message || 'Failed to generate suggestions',
                   });
                 }
               }
