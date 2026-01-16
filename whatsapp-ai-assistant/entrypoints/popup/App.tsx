@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { SettingsForm } from '@/components/SettingsForm';
 import { getSettings, saveSettings } from '@/lib/storage';
-import { testAPIKey } from '@/lib/openai';
 import type { Settings } from '@/lib/types';
 import './style.css';
+
 
 export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -23,26 +23,39 @@ export default function App() {
     // Show success message
     const badge = document.createElement('div');
     badge.textContent = '✓ Saved successfully';
-    badge.className = 'fixed top-2 right-2 bg-green-500 text-white px-3 py-1 rounded text-sm z-50';
+    badge.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg z-50 animate-fade-in';
     document.body.appendChild(badge);
     setTimeout(() => badge.remove(), 2000);
   };
 
   if (!settings) {
     return (
-      <div className="w-80 h-96 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-whatsapp-green"></div>
+      <div className="w-full h-96 flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
       </div>
     );
   }
 
   return (
-    <div className="w-80 max-h-[600px] overflow-y-auto">
-      <div className="bg-whatsapp-green text-white p-4">
-        <h1 className="text-lg font-bold">💬 WhatsApp AI Assistant</h1>
-        <p className="text-xs opacity-90 mt-1">Configure your AI-powered suggestions</p>
+    <div className="w-full h-[600px] overflow-y-auto bg-gray-50 font-sans">
+      {/* Reple Header - Clean Modern Style */}
+      <div className="bg-white border-b border-gray-100 p-5 sticky top-0 z-10 shadow-sm">
+        <div className="flex items-center gap-3">
+          <img
+            src="/reple-logo.png"
+            alt="Reple"
+            className="w-10 h-10 object-contain drop-shadow-md"
+          />
+          <div>
+            <h1 className="text-xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
+              Reple
+            </h1>
+            <p className="text-xs font-medium text-gray-500 mt-0.5">AI Response Assistant</p>
+          </div>
+        </div>
       </div>
-      <SettingsForm settings={settings} onSave={handleSave} onTest={testAPIKey} />
+
+      <SettingsForm settings={settings} onSave={handleSave} />
     </div>
   );
 }

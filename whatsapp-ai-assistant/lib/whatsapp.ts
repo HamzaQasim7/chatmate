@@ -1,66 +1,205 @@
 import type { ChatContext } from './types';
 
+// Log helper for debugging
+function debugLog(message: string, data?: any) {
+  console.log(`[WhatsApp AI] ${message}`, data || '');
+}
+
 export function detectNewMessage(node: HTMLElement): boolean {
-  // Check if the node is an incoming message bubble
+  debugLog('Checking node for new message:', node.className);
+
+  // Check if the node is an incoming message bubble using multiple strategies
   const messageContainer = node.querySelector('[data-testid="msg-container"]');
-  if (!messageContainer) return false;
 
-  // Check if it's an incoming message (not sent by user)
-  const messageIn = node.closest('[data-id*="false"]') || 
-                    node.querySelector('[data-testid="msg-container"]')?.getAttribute('data-id')?.includes('false');
-  
-  // Alternative: check for message-in class or specific WhatsApp structure
-  const isIncoming = node.classList.contains('message-in') ||
-                     messageContainer.closest('[data-id*="false"]') !== null ||
-                     node.querySelector('[data-testid="msg-container"]')?.parentElement?.getAttribute('data-id')?.includes('false');
+  // Strategy 1: Check for message-in class (WhatsApp's class for incoming messages)
+  const hasMessageInClass = node.classList.contains('message-in') ||
+    node.querySelector('.message-in') !== null;
 
-  return !!messageContainer && isIncoming;
+  // Strategy 2: Check data-id attribute containing "false" (indicates incoming)
+  const dataId = node.getAttribute('data-id') ||
+    messageContainer?.getAttribute('data-id') ||
+    messageContainer?.closest('[data-id]')?.getAttribute('data-id') || '';
+  const isIncomingByDataId = dataId.includes('false');
+
+  // Strategy 3: Check for copyable-text with data-pre-plain-text (contains timestamp and sender)
+  const hasCopyableText = node.querySelector('[data-pre-plain-text]') !== null ||
+    node.querySelector('.copyable-text') !== null;
+
+  // Strategy 4: Check for focusable-list-item which wraps messages
+  const isFocusableItem = node.hasAttribute('data-id') ||
+    node.closest('[data-id]') !== null;
+
+  const isIncoming = hasMessageInClass || isIncomingByDataId || (hasCopyableText && isFocusableItem);
+
+  debugLog('Message detection result:', {
+    hasMessageInClass,
+    isIncomingByDataId,
+    hasCopyableText,
+    isFocusableItem,
+    isIncoming
+  });
+
+  return isIncoming;
 }
 
 export function extractMessageData(): ChatContext | null {
   try {
-    // Get sender name from chat header
-    const headerElement = document.querySelector('[data-testid="conversation-header"]');
-    const senderName = headerElement?.querySelector('[dir="auto"]')?.textContent || 'Client';
+    debugLog('Starting message extraction...');
 
-    // Get current message (last incoming message)
-    const messages = document.querySelectorAll('[data-testid="msg-container"]');
-    const lastMessage = Array.from(messages)
-      .reverse()
-      .find((msg) => {
-        const msgId = msg.getAttribute('data-id');
-        return msgId && msgId.includes('false'); // false indicates incoming message
-      });
+    // Get sender name from chat header - try multiple selectors
+    const headerSelectors = [
+      '[data-testid="conversation-header"] [dir="auto"]',
+      '[data-testid="conversation-info-header"] span[dir="auto"]',
+      'header span[dir="auto"][title]',
+      '#main header span[title]',
+    ];
 
-    if (!lastMessage) return null;
+    let senderName = 'Client';
+    for (const selector of headerSelectors) {
+      const element = document.querySelector(selector);
+      if (element?.textContent) {
+        senderName = element.textContent;
+        debugLog('Found sender name:', senderName);
+        break;
+      }
+    }
 
-    const messageText = lastMessage.querySelector('.selectable-text')?.textContent || '';
-    if (!messageText.trim()) return null;
+    // Get all message containers - try multiple selectors
+    // Get all message containers - try multiple selectors
+    const messageSelectors = [
+      '[data-testid="msg-container"]',
+      '.message-in, .message-out',
+      '[class*="message-in"], [class*="message-out"]',
+      'div[role="row"]',
+      '[data-id] .copyable-text',
+      '.focusable-list-item [data-pre-plain-text]',
+    ];
+
+    let messages: Element[] = [];
+    for (const selector of messageSelectors) {
+      const found = document.querySelectorAll(selector);
+      if (found.length > 0) {
+        // Validation: ensure found elements look like messages (have text or children)
+        const validMessages = Array.from(found).filter(el => el.textContent?.trim());
+        if (validMessages.length > 0) {
+          messages = validMessages;
+          debugLog(`Found ${messages.length} messages with selector: ${selector}`);
+          break;
+        }
+      }
+    }
+
+    if (messages.length === 0) {
+      debugLog('No messages found with any selector');
+      return null;
+    }
+
+    // Find the last incoming message
+    const incomingMessages = messages.filter((msg) => {
+      // Check if message is incoming (not sent by user)
+      const parent = msg.closest('[data-id]');
+      const dataId = parent?.getAttribute('data-id') || msg.getAttribute('data-id') || '';
+
+      // Class checks
+      const hasMessageIn = msg.classList.contains('message-in') ||
+        msg.querySelector('.message-in') !== null ||
+        parent?.classList.contains('message-in');
+
+      // Data-id check (false = incoming)
+      const isIncomingDataId = dataId.includes('false');
+
+      // Attribute fallback
+      const hasIncomingAttr = msg.getAttribute('aria-label')?.toLowerCase().includes('remote') || false; // Heuristic
+
+      return isIncomingDataId || hasMessageIn || hasIncomingAttr;
+    });
+
+    debugLog(`Found ${incomingMessages.length} incoming messages`);
+
+    const lastIncoming = incomingMessages[incomingMessages.length - 1];
+    if (!lastIncoming) {
+      // Fallback: just get the last message if no specific incoming found
+      debugLog('No incoming messages found, using last message as fallback');
+    }
+
+    const targetMessage = lastIncoming || messages[messages.length - 1];
+
+    // Extract message text - try multiple strategies
+    const textSelectors = [
+      '.selectable-text span',
+      '.selectable-text',
+      '[data-testid="conversation-compose-box-input"]',
+      '.copyable-text span',
+      'span.selectable-text',
+    ];
+
+    let messageText = '';
+    for (const selector of textSelectors) {
+      const textElement = targetMessage.querySelector(selector);
+      if (textElement?.textContent) {
+        messageText = textElement.textContent;
+        debugLog('Found message text:', messageText.substring(0, 50) + '...');
+        break;
+      }
+    }
+
+    // Fallback: get textContent directly
+    if (!messageText) {
+      messageText = targetMessage.textContent || '';
+      debugLog('Using fallback textContent:', messageText.substring(0, 50) + '...');
+    }
+
+    if (!messageText.trim()) {
+      debugLog('No message text found');
+      return null;
+    }
 
     // Get previous messages for context (last 5 messages)
-    const allMessages = Array.from(messages)
+    const allMessages = messages
       .slice(-6, -1)
-      .map((msg) => msg.querySelector('.selectable-text')?.textContent || '')
+      .map((msg) => {
+        for (const selector of textSelectors) {
+          const textEl = msg.querySelector(selector);
+          if (textEl?.textContent) return textEl.textContent;
+        }
+        return msg.textContent || '';
+      })
       .filter(Boolean);
 
-    return {
+    const context: ChatContext = {
       senderName,
-      currentMessage: messageText,
+      currentMessage: messageText.trim(),
       previousMessages: allMessages,
     };
+
+    debugLog('Extracted context:', context);
+    return context;
   } catch (error) {
-    console.error('Error extracting message data:', error);
+    console.error('[WhatsApp AI] Error extracting message data:', error);
     return null;
   }
 }
 
 export function insertTextToWhatsApp(text: string): void {
-  const inputField = document.querySelector<HTMLDivElement>(
-    'div[contenteditable="true"][data-tab="10"]'
-  );
+  // Try multiple selectors for the input field
+  const inputSelectors = [
+    'div[contenteditable="true"][data-tab="10"]',
+    'div[contenteditable="true"][data-testid="conversation-compose-box-input"]',
+    'footer div[contenteditable="true"]',
+    '#main footer div[contenteditable="true"]',
+  ];
+
+  let inputField: HTMLDivElement | null = null;
+  for (const selector of inputSelectors) {
+    inputField = document.querySelector<HTMLDivElement>(selector);
+    if (inputField) {
+      debugLog('Found input field with selector:', selector);
+      break;
+    }
+  }
 
   if (!inputField) {
-    console.error('WhatsApp input field not found');
+    console.error('[WhatsApp AI] Input field not found');
     return;
   }
 
@@ -73,7 +212,7 @@ export function insertTextToWhatsApp(text: string): void {
   // Method 2: Fallback if execCommand doesn't work
   if (!inputField.textContent) {
     inputField.textContent = text;
-    
+
     // Trigger input event to update WhatsApp's state
     const inputEvent = new InputEvent('input', {
       bubbles: true,
@@ -84,8 +223,19 @@ export function insertTextToWhatsApp(text: string): void {
 
   // Keep focus on input field
   inputField.focus();
+  debugLog('Text inserted successfully');
 }
 
 export function getWhatsAppInputField(): HTMLDivElement | null {
-  return document.querySelector('div[contenteditable="true"][data-tab="10"]');
+  const selectors = [
+    'div[contenteditable="true"][data-tab="10"]',
+    'div[contenteditable="true"][data-testid="conversation-compose-box-input"]',
+    'footer div[contenteditable="true"]',
+  ];
+
+  for (const selector of selectors) {
+    const field = document.querySelector<HTMLDivElement>(selector);
+    if (field) return field;
+  }
+  return null;
 }

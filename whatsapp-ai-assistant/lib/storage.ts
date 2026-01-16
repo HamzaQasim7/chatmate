@@ -5,7 +5,7 @@ const DEFAULT_SETTINGS: Settings = {
   model: 'gpt-3.5-turbo',
   language: 'en',
   isEnabled: true,
-  tone: 'balanced',
+  tone: 'professional',
 };
 
 export async function getSettings(): Promise<Settings> {
