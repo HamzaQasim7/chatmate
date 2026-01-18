@@ -31,7 +31,7 @@ export default function App() {
   if (!settings) {
     return (
       <div className="w-full h-96 flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#00f592' }}></div>
       </div>
     );
   }
@@ -42,7 +42,7 @@ export default function App() {
       <div className="bg-white border-b border-gray-100 p-5 sticky top-0 z-10 shadow-sm">
         <div className="flex items-center gap-3">
           <img
-            src="/reple-logo.png"
+            src="/reple-icon.png"
             alt="Reple"
             className="w-10 h-10 object-contain drop-shadow-md"
           />

@@ -1,11 +1,39 @@
 export type ToneType = 'formal' | 'friendly' | 'professional' | 'natural' | 'sales' | 'negotiator';
+export type ModelType = 'reple-quick' | 'reple-smart' | 'reple-pro';
 
 export interface Settings {
-  apiKey: string;
-  model: 'gpt-3.5-turbo' | 'gpt-4' | 'gpt-4-turbo';
+  apiKey?: string; // Optional: User's custom key. If empty, use free tier.
+  model: ModelType;
   language: 'en' | 'ur' | 'mixed';
   isEnabled: boolean;
   tone: ToneType;
+}
+
+// Model configuration
+export const MODEL_CONFIG: Record<ModelType, { label: string; description: string; openAIModel: string; isPro: boolean }> = {
+  'reple-quick': {
+    label: 'Reple Quick',
+    description: 'Fast replies',
+    openAIModel: 'gpt-3.5-turbo',
+    isPro: false
+  },
+  'reple-smart': {
+    label: 'Reple Smart',
+    description: 'Best balance',
+    openAIModel: 'gpt-4o-mini',
+    isPro: false
+  },
+  'reple-pro': {
+    label: 'Reple Pro',
+    description: 'Highest quality',
+    openAIModel: 'gpt-4o',
+    isPro: true
+  }
+};
+
+export interface UsageStats {
+  count: number;
+  lastReset: number; // timestamp
 }
 
 export interface Message {

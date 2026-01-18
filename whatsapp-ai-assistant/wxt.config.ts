@@ -24,7 +24,7 @@ export default defineConfig({
     },
     web_accessible_resources: [
       {
-        resources: ['icon.png', 'reple-logo.png'],
+        resources: ['icon.png', 'reple-logo.png', 'reple-icon.png'],
         matches: ['https://web.whatsapp.com/*'],
       },
     ],

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Copy, Send, Loader2 } from 'lucide-react';
 import type { Suggestion } from '@/lib/types';
+import { TONE_CONFIG } from '@/lib/types';
 
 interface SuggestionCardProps {
   suggestion: Suggestion | null;
@@ -27,16 +28,10 @@ export const SuggestionCard: React.FC<SuggestionCardProps> = ({
 
   if (!suggestion) return null;
 
-  const icons = {
-    professional: '🎯',
-    friendly: '😊',
-    quick: '⚡',
-  };
-
   return (
     <div className="bg-gray-50 rounded-lg p-4 mb-3 hover:bg-gray-100 transition-colors">
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-xl">{icons[suggestion.type]}</span>
+        <span className="text-xl">{TONE_CONFIG[suggestion.type].icon}</span>
         <span className="font-medium text-sm capitalize">{suggestion.type}</span>
       </div>
       <p className="text-sm text-gray-700 mb-3 leading-relaxed">{suggestion.text}</p>

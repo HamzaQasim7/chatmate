@@ -1,38 +1,36 @@
 import React, { useState } from 'react';
-import { Save, FileText, Check, Briefcase, Users, MessageCircle, Target, Scale, ChevronDown, Monitor } from 'lucide-react';
+import { Save, Check, Briefcase, Users, MessageCircle, Target, Scale, ChevronDown, Monitor, ClipboardList } from 'lucide-react';
 import type { Settings, ToneType } from '@/lib/types';
-import { TONE_CONFIG } from '@/lib/types';
+import { TONE_CONFIG, MODEL_CONFIG } from '@/lib/types';
 
 interface SettingsFormProps {
   settings: Settings;
   onSave: (settings: Settings) => Promise<void>;
-  onTest?: (apiKey: string) => Promise<boolean>;
 }
 
 // Map icons
 const ToneIcons: Record<ToneType, React.ReactNode> = {
-  formal: <FileText size={20} />,
-  friendly: <Users size={20} />,
-  professional: <Briefcase size={20} />,
-  natural: <MessageCircle size={20} />,
-  sales: <Target size={20} />,
-  negotiator: <Scale size={20} />,
+  formal: <ClipboardList size={22} />,
+  friendly: <Users size={22} />,
+  professional: <Briefcase size={22} />,
+  natural: <MessageCircle size={22} />,
+  sales: <Target size={22} />,
+  negotiator: <Scale size={22} />,
 };
 
 // Map colors for grid items
 const ToneStyles: Record<ToneType, { bg: string, border: string, iconColor: string, iconBg: string }> = {
-  formal: { bg: 'bg-gray-50', border: 'border-gray-200', iconColor: 'text-gray-600', iconBg: 'bg-gray-100' },
-  friendly: { bg: 'bg-yellow-50', border: 'border-yellow-200', iconColor: 'text-yellow-600', iconBg: 'bg-yellow-100' },
-  professional: { bg: 'bg-blue-50', border: 'border-blue-200', iconColor: 'text-blue-600', iconBg: 'bg-blue-100' },
-  natural: { bg: 'bg-green-50', border: 'border-green-200', iconColor: 'text-green-600', iconBg: 'bg-green-100' },
-  sales: { bg: 'bg-orange-50', border: 'border-orange-200', iconColor: 'text-orange-600', iconBg: 'bg-orange-100' },
-  negotiator: { bg: 'bg-purple-50', border: 'border-purple-200', iconColor: 'text-purple-600', iconBg: 'bg-purple-100' },
+  formal: { bg: 'bg-blue-50', border: 'border-blue-100', iconColor: 'text-blue-600', iconBg: 'bg-blue-100' },
+  friendly: { bg: 'bg-emerald-50', border: 'border-emerald-200', iconColor: 'text-emerald-600', iconBg: 'bg-emerald-100' },
+  professional: { bg: 'bg-slate-50', border: 'border-slate-200', iconColor: 'text-slate-600', iconBg: 'bg-slate-100' },
+  natural: { bg: 'bg-violet-50', border: 'border-violet-200', iconColor: 'text-violet-600', iconBg: 'bg-violet-100' },
+  sales: { bg: 'bg-rose-50', border: 'border-rose-200', iconColor: 'text-rose-600', iconBg: 'bg-rose-100' },
+  negotiator: { bg: 'bg-amber-50', border: 'border-amber-200', iconColor: 'text-amber-600', iconBg: 'bg-amber-100' },
 };
 
 export const SettingsForm: React.FC<SettingsFormProps> = ({
   settings,
   onSave,
-  onTest,
 }) => {
   const [form, setForm] = useState<Settings>(settings);
   const [saving, setSaving] = useState(false);
@@ -47,6 +45,31 @@ export const SettingsForm: React.FC<SettingsFormProps> = ({
 
   return (
     <div className="p-5 space-y-6">
+      {/* API Key Section */}
+      <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+        <label className="block text-sm font-bold text-gray-800 mb-2">
+          OpenAI API Key <span className="text-gray-400 font-normal">(Optional)</span>
+        </label>
+        <input
+          type="password"
+          value={form.apiKey || ''}
+          onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
+          placeholder="sk-..."
+          className="w-full px-4 py-2.5 bg-white border border-blue-200 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-mono"
+        />
+        <div className="mt-2 text-xs flex items-center gap-2">
+          {form.apiKey ? (
+            <span className="text-green-600 font-semibold flex items-center gap-1">
+              <Check size={12} /> Unlimited Usage Unlocked
+            </span>
+          ) : (
+            <span className="text-blue-600 font-medium">
+              ℹ️ Using Free Tier (20 responses/month)
+            </span>
+          )}
+        </div>
+      </div>
+
       {/* Extension Status */}
       <div className="flex items-center justify-between pb-2">
         <div className="flex items-center gap-2">
@@ -78,25 +101,30 @@ export const SettingsForm: React.FC<SettingsFormProps> = ({
               <button
                 key={tone}
                 onClick={() => setForm({ ...form, tone })}
-                className={`relative flex items-center gap-3 p-3 rounded-xl border transition-all duration-200 text-left hover:shadow-sm ${isSelected
-                    ? `${style.bg} ${style.border} ring-1 ring-offset-0 ${style.border.replace('border', 'ring')}`
-                    : 'bg-white border-gray-200 hover:border-gray-300'
+                className={`relative flex flex-col items-start gap-2 p-4 rounded-3xl border transition-all duration-200 text-left hover:shadow-md h-full ${isSelected
+                  ? `${style.bg} ${style.border} ring-2 ring-emerald-400`
+                  : 'bg-white border-gray-100 hover:border-gray-200 shadow-sm'
                   }`}
               >
-                <div className={`p-2 rounded-lg ${isSelected ? 'bg-white/80' : style.iconBg} ${style.iconColor}`}>
-                  {ToneIcons[tone]}
+                <div className="flex justify-between w-full items-start">
+                  <div className={`p-2.5 rounded-full ${isSelected ? 'bg-white' : style.iconBg} ${style.iconColor}`}>
+                    {ToneIcons[tone]}
+                  </div>
+                  {isSelected && (
+                    <div className="bg-emerald-500 text-white rounded-full p-1">
+                      <Check size={12} strokeWidth={4} />
+                    </div>
+                  )}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className={`text-sm font-bold ${isSelected ? 'text-gray-900' : 'text-gray-700'}`}>
+
+                <div className="mt-1">
+                  <div className="text-[13px] font-bold text-gray-900 leading-tight mb-0.5">
                     {config.label}
                   </div>
-                  <div className="text-[10px] text-gray-500 truncate mt-0.5">{config.description}</div>
-                </div>
-                {isSelected && (
-                  <div className={`absolute top-2 right-2 ${style.iconColor}`}>
-                    <Check size={14} strokeWidth={3} />
+                  <div className="text-[11px] text-gray-500 font-medium leading-snug">
+                    {config.description}
                   </div>
-                )}
+                </div>
               </button>
             );
           })}
@@ -107,14 +135,24 @@ export const SettingsForm: React.FC<SettingsFormProps> = ({
       <div>
         <label className="block text-sm font-semibold text-gray-700 mb-3">AI Model</label>
         <div className="relative">
+
+
+
           <select
             value={form.model}
-            onChange={(e) => setForm({ ...form, model: e.target.value as Settings['model'] })}
+            onChange={(e) => setForm({ ...form, model: e.target.value as any })}
             className="w-full pl-4 pr-10 py-3 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium"
           >
-            <option value="gpt-3.5-turbo">GPT-3.5 Turbo (Fast & Cheap)</option>
-            <option value="gpt-4">GPT-4 (Better Quality)</option>
-            <option value="gpt-4-turbo">GPT-4 Turbo (Best Balance)</option>
+            {(Object.keys(MODEL_CONFIG) as Array<keyof typeof MODEL_CONFIG>).map((key) => {
+              const config = MODEL_CONFIG[key];
+              const isLocked = config.isPro && !form.apiKey;
+
+              return (
+                <option key={key} value={key} disabled={isLocked}>
+                  {config.label} - {config.description} {isLocked ? '(Requires API Key)' : ''}
+                </option>
+              );
+            })}
           </select>
           <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
         </div>
@@ -147,12 +185,7 @@ export const SettingsForm: React.FC<SettingsFormProps> = ({
         {saving ? 'Saving...' : 'Save Settings'}
       </button>
 
-      {/* Privacy Notice */}
-      <div className="bg-yellow-50 border border-yellow-100 rounded-xl p-4 text-xs text-gray-600 leading-relaxed text-center">
-        <span className="font-bold text-yellow-700 block mb-1">⚠️ Privacy Notice</span>
-        Messages are sent to OpenAI for AI processing using your API key.
-        Don't use for highly confidential conversations.
-      </div>
+
     </div>
   );
 };

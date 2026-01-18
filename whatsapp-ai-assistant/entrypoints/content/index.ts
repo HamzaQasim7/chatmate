@@ -134,11 +134,17 @@ export async function triggerSuggestions() {
     }
   } catch (error: any) {
     console.error('[WhatsApp AI] Error generating suggestions:', error);
+
+    let errorMessage = error.message || 'Failed to generate suggestions';
+    if (errorMessage.includes('Extension context invalidated')) {
+      errorMessage = 'Extension updated. Please refresh the page.';
+    }
+
     if (updateSidebar) {
       updateSidebar('showSuggestions', {
         suggestions: [],
         message: messageData.currentMessage,
-        error: error.message || 'Failed to generate suggestions',
+        error: errorMessage,
       });
     }
   }
@@ -176,6 +182,15 @@ function observeChatSwitches() {
 
         // Small delay to let the new chat load
         setTimeout(() => {
+          // OPTIMIZATION: Initialize lastProcessedMessage with the current latest message
+          // This prevents auto-generation for the message that is ALREADY on screen when opening the chat.
+          // The user can click "Scan Messages" if they want to generate a response for it.
+          const initialData = extractMessageData();
+          if (initialData) {
+            lastProcessedMessage = initialData.currentMessage;
+            debugLog('Chat loaded. Initialized state to prevent auto-trigger:', lastProcessedMessage.substring(0, 50));
+          }
+
           observeMessages();
         }, 1000);
         break;
@@ -258,6 +273,12 @@ function observeMessages() {
           lastProcessedMessage = messageData.currentMessage;
           debugLog('Processing new message:', messageData.currentMessage.substring(0, 50));
 
+          // Filter out short messages to save API costs
+          if (messageData.currentMessage.trim().length < 8) {
+            debugLog('Skipping short message (< 8 chars):', messageData.currentMessage);
+            return;
+          }
+
           // Show loading state
           if (updateSidebar) {
             updateSidebar('loading', {});
@@ -280,11 +301,17 @@ function observeMessages() {
             }
           } catch (error: any) {
             console.error('[WhatsApp AI] Error generating suggestions:', error);
+
+            let errorMessage = error.message || 'Failed to generate suggestions';
+            if (errorMessage.includes('Extension context invalidated')) {
+              errorMessage = 'Extension updated. Please refresh the page.';
+            }
+
             if (updateSidebar) {
               updateSidebar('showSuggestions', {
                 suggestions: [],
                 message: messageData.currentMessage,
-                error: error.message || 'Failed to generate suggestions',
+                error: errorMessage,
               });
             }
           }

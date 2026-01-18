@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
-  Sparkles,
   Quote,
   ChevronDown,
   RefreshCw,
@@ -19,11 +18,12 @@ import {
   Loader2,
   Sun,
   Moon,
-  GripVertical
+  GripVertical,
+  SendHorizontal
 } from 'lucide-react';
 import { insertTextToWhatsApp } from '@/lib/whatsapp';
-import { getSettings, saveSettings } from '@/lib/storage';
-import type { Suggestion, ToneType, Settings } from '@/lib/types';
+import { getSettings, saveSettings, getUsageStats } from '@/lib/storage';
+import type { Suggestion, ToneType, Settings, UsageStats } from '@/lib/types';
 import { TONE_CONFIG } from '@/lib/types';
 
 let sidebarUpdateFn: ((action: string, data: any) => void) | null = null;
@@ -42,7 +42,7 @@ const ToneIcons: Record<ToneType, React.ReactNode> = {
 const toneColors: Record<ToneType, { bg: string; border: string; text: string }> = {
   formal: { bg: 'rgba(142, 142, 147, 0.15)', border: 'rgba(142, 142, 147, 0.3)', text: '#8E8E93' },
   friendly: { bg: 'rgba(255, 204, 0, 0.15)', border: 'rgba(255, 204, 0, 0.3)', text: '#B8860B' },
-  professional: { bg: 'rgba(0, 122, 255, 0.15)', border: 'rgba(0, 122, 255, 0.25)', text: '#007AFF' },
+  professional: { bg: 'rgba(0, 245, 146, 0.15)', border: 'rgba(0, 245, 146, 0.25)', text: '#00f592' },
   natural: { bg: 'rgba(52, 199, 89, 0.15)', border: 'rgba(52, 199, 89, 0.25)', text: '#34C759' },
   sales: { bg: 'rgba(255, 149, 0, 0.15)', border: 'rgba(255, 149, 0, 0.25)', text: '#FF9500' },
   negotiator: { bg: 'rgba(175, 82, 222, 0.15)', border: 'rgba(175, 82, 222, 0.25)', text: '#AF52DE' },
@@ -129,6 +129,9 @@ function FloatingPopup() {
   const [showToneDropdown, setShowToneDropdown] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [isDark, setIsDark] = useState(true);
+  const [customInput, setCustomInput] = useState('');
+  const [usage, setUsage] = useState<UsageStats | null>(null);
+  const [hasCustomKey, setHasCustomKey] = useState(false);
 
   // Drag state
   const [position, setPosition] = useState({ x: 0, y: 80 });
@@ -143,11 +146,25 @@ function FloatingPopup() {
     styleSheet.textContent = `
       @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       @keyframes fadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+      @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      @keyframes fadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
       @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+      .reple-custom-input::placeholder { color: var(--reple-placeholder-color) !important; opacity: 1; }
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     `;
     document.head.appendChild(styleSheet);
-    getSettings().then(settings => setCurrentTone(settings.tone));
+    document.head.appendChild(styleSheet);
+
+    // Initial data load
+    const loadData = async () => {
+      const settings = await getSettings();
+      setCurrentTone(settings.tone);
+      setHasCustomKey(!!settings.apiKey);
+
+      const stats = await getUsageStats();
+      setUsage(stats);
+    };
+    loadData();
 
     // Center horizontally on load
     const centerX = (window.innerWidth - 420) / 2;
@@ -212,7 +229,18 @@ function FloatingPopup() {
         setLoading(true);
         setExpanded(true);
         setError(null);
-        getSettings().then(settings => setCurrentTone(settings.tone));
+      } else if (action === 'loading') {
+        setLoading(true);
+        setExpanded(true);
+        setError(null);
+        // Refresh stats on load
+        getSettings().then(s => {
+          setCurrentTone(s.tone);
+          setHasCustomKey(!!s.apiKey);
+        });
+        getUsageStats().then(setUsage);
+      } else if (action === 'usageUpdated') {
+        if (data.stats) setUsage(data.stats);
       }
     };
     return () => { sidebarUpdateFn = null; };
@@ -278,14 +306,24 @@ function FloatingPopup() {
     setRegenerating(true);
     setError(null);
     try {
-      const response = await browser.runtime.sendMessage({ action: 'regenerate' });
+      const response = await browser.runtime.sendMessage({
+        action: 'regenerate',
+        customInstruction: customInput
+      });
       const suggestions = response?.suggestions || [];
       setSuggestion(suggestions[0] || null);
       if (response?.error) setError(response.error);
     } catch (err: any) {
-      setError(err.message || 'Failed');
+      console.error('Regenerate error:', err);
+      // specific check for context invalidated
+      if (err.message && err.message.includes('Extension context invalidated')) {
+        setError('Extension updated. Please refresh the page.');
+      } else {
+        setError(err.message || 'Failed to regenerate. Please try again.');
+      }
+    } finally {
+      setRegenerating(false);
     }
-    setRegenerating(false);
   };
 
   const handleScanMessages = async () => {
@@ -321,9 +359,9 @@ function FloatingPopup() {
             alignItems: 'center',
             gap: '8px',
             padding: '12px 20px',
-            background: 'linear-gradient(135deg, #007AFF 0%, #5AC8FA 100%)',
+            background: 'linear-gradient(135deg, #00f592 0%, #00d68f 100%)',
             borderRadius: '25px',
-            boxShadow: '0 4px 20px rgba(0, 122, 255, 0.4)',
+            boxShadow: '0 4px 20px rgba(0, 245, 146, 0.4)',
             cursor: 'pointer',
             color: 'white',
             fontSize: '14px',
@@ -332,8 +370,19 @@ function FloatingPopup() {
             animation: hasNew ? 'pulse 1s infinite' : 'none',
           }}
         >
-          <Sparkles size={18} />
-          Reple
+          <img
+            src={browser.runtime.getURL('/reple-icon.png')}
+            alt=""
+            style={{
+              width: '24px',
+              height: '24px',
+              objectFit: 'contain',
+              background: 'white',
+              borderRadius: '50%',
+              padding: '2px',
+            }}
+          />
+
           {hasNew && (
             <span style={{
               background: '#FF3B30',
@@ -393,7 +442,7 @@ function FloatingPopup() {
           </div>
 
           <img
-            src={browser.runtime.getURL('/reple-logo.png')}
+            src={browser.runtime.getURL('/reple-icon.png')}
             alt=""
             style={{
               height: '28px',
@@ -402,8 +451,21 @@ function FloatingPopup() {
             }}
           />
 
-          <span style={{ fontSize: '15px', fontWeight: 600, color: theme.titleColor, flex: 1 }}>
-            Reple
+          <span style={{ fontSize: '15px', fontWeight: 600, color: theme.titleColor, flex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
+
+            {/* Credit Counter (Only visible if using Free Tier) */}
+            {!hasCustomKey && usage && (
+              <span style={{
+                fontSize: '11px',
+                background: usage.count >= 20 ? '#FF3B30' : theme.closeBtnBg,
+                color: usage.count >= 20 ? 'white' : theme.closeBtnColor,
+                padding: '2px 8px',
+                borderRadius: '10px',
+                border: `1px solid ${theme.headerBorder}`,
+              }}>
+                {Math.max(0, 20 - usage.count)}/20
+              </span>
+            )}
           </span>
 
           {/* Tone Selector */}
@@ -562,7 +624,7 @@ function FloatingPopup() {
               alignItems: 'center',
               gap: '14px',
             }}>
-              <Loader2 size={28} style={{ color: '#007AFF', animation: 'spin 1s linear infinite' }} />
+              <Loader2 size={28} style={{ color: '#00f592', animation: 'spin 1s linear infinite' }} />
               <span style={{ fontSize: '13px', color: theme.loadingTextColor, fontWeight: 500 }}>
                 Generating {toneConfig.label} response...
               </span>
@@ -577,7 +639,33 @@ function FloatingPopup() {
               border: `1px solid ${theme.responseCardBorder}`,
               overflow: 'hidden',
             }}>
-              <div style={{ padding: '18px' }}>
+              <div style={{ padding: '18px', position: 'relative' }}>
+                <button
+                  onClick={handleRegenerate}
+                  disabled={regenerating}
+                  title="Regenerate"
+                  style={{
+                    position: 'absolute',
+                    top: '8px',
+                    right: '8px',
+                    background: 'rgba(0,0,0,0.05)',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '6px',
+                    cursor: 'pointer',
+                    color: theme.copyBtnColor,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s ease',
+                    opacity: 0.7,
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                  onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
+                >
+                  <RefreshCw size={14} style={{ animation: regenerating ? 'spin 1s linear infinite' : 'none' }} />
+                </button>
+
                 <p style={{
                   fontSize: '14px',
                   lineHeight: 1.65,
@@ -648,12 +736,12 @@ function FloatingPopup() {
                     padding: '10px 18px',
                     borderRadius: '10px',
                     border: 'none',
-                    background: '#007AFF',
+                    background: '#00f592',
                     color: 'white',
                     fontSize: '12px',
                     fontWeight: 600,
                     cursor: 'pointer',
-                    boxShadow: '0 4px 12px rgba(0, 122, 255, 0.3)',
+                    boxShadow: '0 4px 12px rgba(0, 245, 146, 0.3)',
                   }}
                 >
                   <CheckCircle size={14} />
@@ -673,12 +761,12 @@ function FloatingPopup() {
                 padding: '14px',
                 borderRadius: '12px',
                 border: 'none',
-                background: 'linear-gradient(135deg, #007AFF 0%, #5AC8FA 100%)',
+                background: 'linear-gradient(135deg, #00f592 0%, #00d68f 100%)',
                 color: 'white',
                 fontSize: '14px',
                 fontWeight: 600,
                 cursor: 'pointer',
-                boxShadow: '0 4px 12px rgba(0, 122, 255, 0.3)',
+                boxShadow: '0 4px 12px rgba(0, 245, 146, 0.3)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -698,6 +786,63 @@ function FloatingPopup() {
             </div>
           )}
         </div>
+
+        {/* Custom Input Section */}
+        {suggestion && !loading && (
+          <div style={{ padding: '0 14px 14px 14px' }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '4px 4px 4px 12px',
+              background: theme.messagePreviewBg,
+              borderRadius: '12px',
+              border: `1px solid ${theme.messagePreviewBorder}`,
+            }}>
+              <input
+                type="text"
+                value={customInput}
+                onChange={(e) => setCustomInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && !regenerating && handleRegenerate()}
+                placeholder="Custom instruction... (e.g., 'Make it shorter')"
+                className="reple-custom-input"
+                style={{
+                  flex: 1,
+                  background: 'transparent',
+                  border: 'none',
+                  color: theme.titleColor,
+                  fontSize: '13px',
+                  outline: 'none',
+                  fontFamily: 'inherit',
+                  // @ts-ignore
+                  '--reple-placeholder-color': theme.loadingTextColor,
+                }}
+              />
+              <button
+                onClick={handleRegenerate}
+                disabled={regenerating || !customInput.trim()}
+                style={{
+                  padding: '8px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: customInput.trim() ? '#00f592' : 'transparent',
+                  color: customInput.trim() ? 'white' : theme.closeBtnColor,
+                  cursor: customInput.trim() ? 'pointer' : 'default',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                {regenerating ? (
+                  <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                ) : (
+                  <SendHorizontal size={16} />
+                )}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
