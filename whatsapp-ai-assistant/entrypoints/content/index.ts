@@ -13,7 +13,7 @@ let currentAdapter: PlatformAdapter | null = null;
 let updateSidebar: ((action: string, data: any) => void) | null = null;
 
 export default defineContentScript({
-  matches: ['https://web.whatsapp.com/*', 'https://app.slack.com/*'],
+  matches: ['https://web.whatsapp.com/*', 'https://app.slack.com/*', 'https://www.linkedin.com/*'],
   cssInjectionMode: 'ui',
 
   async main(_ctx) {

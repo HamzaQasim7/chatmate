@@ -469,7 +469,8 @@ function FloatingPopup() {
           borderRadius: '20px',
           boxShadow: theme.panelShadow,
           border: `1px solid ${theme.panelBorder}`,
-          overflow: 'hidden',
+          // overflow: 'hidden', // caused dropdown to be cut off
+          overflow: 'visible',
           animation: 'fadeIn 0.25s ease-out',
         }}
       >
@@ -863,8 +864,56 @@ function FloatingPopup() {
 
           {/* Error */}
           {error && (
-            <div style={{ padding: '16px', color: '#FF3B30', fontSize: '13px', textAlign: 'center' }}>
-              ⚠️ {error}
+            <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
+              <div style={{ color: '#FF3B30', fontSize: '13px', textAlign: 'center' }}>
+                ⚠️ {error}
+              </div>
+
+              {error.toLowerCase().includes('refres') || error.toLowerCase().includes('invalidated') ? (
+                <button
+                  onClick={() => window.location.reload()}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: `1px solid ${theme.headerBorder}`,
+                    background: '#FF3B30',
+                    color: 'white',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 2px 8px rgba(255, 59, 48, 0.3)',
+                  }}
+                >
+                  <RefreshCw size={14} />
+                  Refresh Page
+                </button>
+              ) : (
+                <button
+                  onClick={handleScanMessages}
+                  disabled={scanning}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: `1px solid ${theme.headerBorder}`,
+                    background: theme.actionsBarBg,
+                    color: theme.titleColor,
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s',
+                    opacity: scanning ? 0.7 : 1,
+                  }}
+                >
+                  {scanning ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={14} />}
+                  {scanning ? 'Scanning...' : 'Rescan'}
+                </button>
+              )}
             </div>
           )}
         </div>

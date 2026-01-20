@@ -3,29 +3,37 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   manifest: {
     name: 'Reple - AI Reply Assistant',
-    description: 'Smart AI-powered response suggestions for WhatsApp Web',
+    description: 'Smart AI-powered response suggestions like you',
     version: '1.0.0',
     permissions: ['storage', 'activeTab'],
-    host_permissions: ['https://web.whatsapp.com/*', 'https://api.openai.com/*'],
+    host_permissions: ['https://web.whatsapp.com/*', 'https://app.slack.com/*', 'https://www.linkedin.com/*', 'https://api.openai.com/*'],
     icons: {
-      16: 'reple-favicon.png',
-      32: 'reple-favicon.png',
-      48: 'reple-favicon.png',
-      128: 'reple-favicon.png',
+      128: 'reple-icon.png',
+    },
+    browser_specific_settings: {
+      gecko: {
+        id: 'reple@chatmate.ai',
+        strict_min_version: '109.0',
+        // Explicitly state data collection policy to pass validation
+        // We set 'none' as we don't passively collect user data (telemetry).
+        // Message processing is user-initiated.
+        // @ts-ignore: Key not yet in WXT types
+        data_collection_permissions: {
+          required: ['none']
+        }
+      }
     },
     action: {
       default_popup: 'popup.html',
       default_title: 'Reple',
       default_icon: {
-        16: 'reple-favicon.png',
-        32: 'reple-favicon.png',
-        48: 'reple-favicon.png',
+        128: 'reple-icon.png',
       },
     },
     web_accessible_resources: [
       {
         resources: ['icon.png', 'reple-logo.png', 'reple-icon.png', 'reple-favicon.png'],
-        matches: ['https://web.whatsapp.com/*', 'https://app.slack.com/*'],
+        matches: ['https://web.whatsapp.com/*', 'https://app.slack.com/*', 'https://www.linkedin.com/*'],
       },
     ],
   },

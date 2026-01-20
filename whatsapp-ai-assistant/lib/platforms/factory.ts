@@ -1,6 +1,7 @@
 import type { PlatformAdapter } from './adapter';
 import { WhatsAppAdapter } from './whatsapp';
 import { SlackAdapter } from './slack';
+import { LinkedInAdapter } from './linkedin';
 
 export class PlatformFactory {
     private static instance: PlatformAdapter | null = null;
@@ -17,6 +18,11 @@ export class PlatformFactory {
 
         if (url.includes('app.slack.com')) {
             this.instance = new SlackAdapter();
+            return this.instance;
+        }
+
+        if (url.includes('linkedin.com')) {
+            this.instance = new LinkedInAdapter();
             return this.instance;
         }
 

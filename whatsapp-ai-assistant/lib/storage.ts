@@ -1,5 +1,16 @@
 import type { Settings, UsageStats } from './types';
 
+// Helper to safely access browser storage
+function getStorageAPI() {
+  const g = globalThis as any;
+  const b = g.browser || g.chrome;
+  if (!b?.storage?.local) {
+    // console.log('[Storage] Browser storage API not available');
+    return null;
+  }
+  return b.storage.local;
+}
+
 const DEFAULT_USAGE: UsageStats = {
   count: 0,
   lastReset: Date.now(),
@@ -14,27 +25,56 @@ const DEFAULT_SETTINGS: Settings = {
 };
 
 export async function getSettings(): Promise<Settings> {
-  const result = await browser.storage.local.get('settings');
-  return { ...DEFAULT_SETTINGS, ...result.settings };
+  const storage = getStorageAPI();
+  if (!storage) return DEFAULT_SETTINGS;
+
+  try {
+    const result = await storage.get('settings');
+    return { ...DEFAULT_SETTINGS, ...result.settings };
+  } catch (e) {
+    console.warn('[Storage] Error getting settings:', e);
+    return DEFAULT_SETTINGS;
+  }
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {
-  await browser.storage.local.set({ settings });
+  const storage = getStorageAPI();
+  if (!storage) return;
+
+  try {
+    await storage.set({ settings });
+  } catch (e) {
+    console.warn('[Storage] Error saving settings:', e);
+  }
 }
 
 export async function isExtensionEnabled(): Promise<boolean> {
   const settings = await getSettings();
   return settings.isEnabled;
-
 }
 
 export async function getUsageStats(): Promise<UsageStats> {
-  const result = await browser.storage.local.get('usageStats');
-  return { ...DEFAULT_USAGE, ...result.usageStats };
+  const storage = getStorageAPI();
+  if (!storage) return DEFAULT_USAGE;
+
+  try {
+    const result = await storage.get('usageStats');
+    return { ...DEFAULT_USAGE, ...result.usageStats };
+  } catch (e) {
+    console.warn('[Storage] Error getting usage stats:', e);
+    return DEFAULT_USAGE;
+  }
 }
 
 export async function saveUsageStats(stats: UsageStats): Promise<void> {
-  await browser.storage.local.set({ usageStats: stats });
+  const storage = getStorageAPI();
+  if (!storage) return;
+
+  try {
+    await storage.set({ usageStats: stats });
+  } catch (e) {
+    console.warn('[Storage] Error saving usage stats:', e);
+  }
 }
 
 export async function checkAndResetUsage(): Promise<UsageStats> {

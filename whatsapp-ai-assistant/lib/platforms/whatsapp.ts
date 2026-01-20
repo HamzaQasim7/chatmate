@@ -40,99 +40,114 @@ export class WhatsAppAdapter implements PlatformAdapter {
 
             // Get sender name
             const headerSelectors = [
-                '[data-testid="conversation-header"] [dir="auto"]',
-                '[data-testid="conversation-info-header"] span[dir="auto"]',
                 'header span[dir="auto"][title]',
                 '#main header span[title]',
+                '[data-testid="conversation-header"] span[title]',
             ];
 
             let senderName = 'Client';
             for (const selector of headerSelectors) {
                 const element = document.querySelector(selector);
-                if (element?.textContent) {
-                    senderName = element.textContent;
+                if (element?.textContent?.trim()) {
+                    senderName = element.textContent.trim();
                     break;
                 }
             }
 
-            // Get messages
-            const messageSelectors = [
-                '[data-testid="msg-container"]',
-                '.message-in, .message-out',
-                '[class*="message-in"], [class*="message-out"]',
-                'div[role="row"]',
-                '[data-id] .copyable-text',
-                '.focusable-list-item [data-pre-plain-text]',
-            ];
+            // STRATEGY: Get ALL message rows, then filter by class
+            // This is more robust than data-id which might change format
+            const allRows = Array.from(document.querySelectorAll('div[role="row"]'));
 
-            let messages: Element[] = [];
-            for (const selector of messageSelectors) {
-                const found = document.querySelectorAll(selector);
-                if (found.length > 0) {
-                    const validMessages = Array.from(found).filter(el => el.textContent?.trim());
-                    if (validMessages.length > 0) {
-                        messages = validMessages;
-                        break;
-                    }
-                }
+            // If specific rows not found, try generic message containers
+            const candidates = allRows.length > 0
+                ? allRows
+                : Array.from(document.querySelectorAll('.message-in, .message-out'));
+
+            if (candidates.length === 0) {
+                this.debugLog('No message rows found');
+                return null;
             }
 
-            if (messages.length === 0) return null;
+            // Identify incoming messages using reliable classes
+            const incomingMessages = candidates.filter(el => {
+                // Check for explicit class
+                if (el.classList.contains('message-in')) return true;
+                if (el.querySelector('.message-in')) return true;
 
-            // Find incoming messages
-            const incomingMessages = messages.filter((msg) => {
-                const parent = msg.closest('[data-id]');
-                const dataId = parent?.getAttribute('data-id') || msg.getAttribute('data-id') || '';
-                const hasMessageIn = msg.classList.contains('message-in') ||
-                    msg.querySelector('.message-in') !== null ||
-                    parent?.classList.contains('message-in');
-                const isIncomingDataId = dataId.includes('false');
-                const hasIncomingAttr = msg.getAttribute('aria-label')?.toLowerCase().includes('remote') || false;
+                // If it has 'message-out', it's definitely NOT incoming
+                if (el.classList.contains('message-out') || el.querySelector('.message-out')) return false;
 
-                return isIncomingDataId || hasMessageIn || hasIncomingAttr;
+                // Fallback: Check data-id for 'false' (legacy check, but useful)
+                const dataId = el.getAttribute('data-id') || el.closest('[data-id]')?.getAttribute('data-id');
+                if (dataId && dataId.includes('false')) return true;
+
+                return false;
             });
 
-            const lastIncoming = incomingMessages[incomingMessages.length - 1];
-            const targetMessage = lastIncoming || messages[messages.length - 1];
-
-            // Extract text
-            const textSelectors = [
-                '.selectable-text span',
-                '.selectable-text',
-                '[data-testid="conversation-compose-box-input"]',
-                '.copyable-text span',
-                'span.selectable-text',
-            ];
-
-            let messageText = '';
-            for (const selector of textSelectors) {
-                const textElement = targetMessage.querySelector(selector);
-                if (textElement?.textContent) {
-                    messageText = textElement.textContent;
-                    break;
-                }
+            if (incomingMessages.length === 0) {
+                this.debugLog('No incoming messages found');
+                return null;
             }
 
-            if (!messageText) messageText = targetMessage.textContent || '';
-            if (!messageText.trim()) return null;
+            // Get the last actual message element (the bubble)
+            const lastRow = incomingMessages[incomingMessages.length - 1];
 
-            // Context (previous messages)
-            const allMessages = messages
-                .slice(-6, -1)
-                .map((msg) => {
-                    for (const selector of textSelectors) {
-                        const textEl = msg.querySelector(selector);
-                        if (textEl?.textContent) return textEl.textContent;
-                    }
-                    return msg.textContent || '';
+            // Find the message bubble within the row
+            const messageBubble = lastRow.querySelector('.copyable-text') ||
+                lastRow.querySelector('[data-pre-plain-text]') ||
+                lastRow;
+
+            // Extract Text - Robust Method
+            let messageText = '';
+
+            // 1. Try clean selectable text first (best quality)
+            const cleanSpans = messageBubble.querySelectorAll('.selectable-text span[dir="ltr"]');
+            if (cleanSpans.length > 0) {
+                messageText = Array.from(cleanSpans).map(s => (s as HTMLElement).innerText).join('');
+            }
+
+            // 2. Fallback to just selectable text
+            if (!messageText) {
+                const selectable = messageBubble.querySelector('.selectable-text');
+                if (selectable) messageText = (selectable as HTMLElement).innerText;
+            }
+
+            // 3. Fallback to raw text but clean it
+            if (!messageText) {
+                messageText = (messageBubble as HTMLElement).innerText || '';
+                // Aggressive cleaning of timestamps and metadata
+                messageText = messageText
+                    .replace(/\d{1,2}:\d{2}\s*(?:AM|PM)?/gi, '') // Remove time
+                    .replace(/\n\s*/g, ' ') // Flatten newlines
+                    .trim();
+            }
+
+            messageText = messageText.trim();
+
+            if (!messageText || messageText.length < 2) {
+                this.debugLog('Extracted text too short or empty');
+                return null;
+            }
+
+            this.debugLog('Extracted:', { sender: senderName, message: messageText.substring(0, 50) });
+
+            // Get context (previous 5 incoming messages)
+            const contextMessages = incomingMessages
+                .slice(-6, -1) // Last 5 before current
+                .map(row => {
+                    const bubble = row.querySelector('.copyable-text') || row;
+                    const spans = bubble.querySelectorAll('.selectable-text span[dir="ltr"]');
+                    if (spans.length > 0) return Array.from(spans).map(s => (s as HTMLElement).innerText).join('');
+                    return (bubble as HTMLElement).innerText?.replace(/\d{1,2}:\d{2}\s*(?:AM|PM)?/gi, '').trim() || '';
                 })
-                .filter(Boolean);
+                .filter(t => t.length > 0);
 
             return {
                 senderName,
-                currentMessage: messageText.trim(),
-                previousMessages: allMessages,
+                currentMessage: messageText,
+                previousMessages: contextMessages,
             };
+
         } catch (error) {
             console.error('[WhatsApp Adapter] Error extracting:', error);
             return null;
@@ -170,21 +185,64 @@ export class WhatsAppAdapter implements PlatformAdapter {
     }
 
     detectNewMessage(node: HTMLElement): boolean {
-        const messageContainer = node.querySelector('[data-testid="msg-container"]');
-        const hasMessageInClass = node.classList.contains('message-in') || node.querySelector('.message-in') !== null;
-        const dataId = node.getAttribute('data-id') ||
-            messageContainer?.getAttribute('data-id') ||
-            messageContainer?.closest('[data-id]')?.getAttribute('data-id') || '';
-        const isIncomingByDataId = dataId.includes('false');
-        const hasCopyableText = node.querySelector('[data-pre-plain-text]') !== null || node.querySelector('.copyable-text') !== null;
-        const isFocusableItem = node.hasAttribute('data-id') || node.closest('[data-id]') !== null;
+        // 1. Check for explicit class
+        if (node.classList.contains('message-in')) return true;
+        if (node.querySelector('.message-in')) return true;
 
-        return hasMessageInClass || isIncomingByDataId || (hasCopyableText && isFocusableItem);
+        // 2. If it has 'message-out', ignore it
+        if (node.classList.contains('message-out') || node.querySelector('.message-out')) return false;
+
+        // 3. Fallback: Check data-id
+        // (Only if it's a message row but missing classes)
+        const dataId = node.getAttribute('data-id') ||
+            node.querySelector('[data-id]')?.getAttribute('data-id') ||
+            node.closest('[data-id]')?.getAttribute('data-id') || '';
+
+        if (dataId && dataId.includes('false')) return true;
+
+        // 4. Check for message content wrapper + row role
+        const isMessageRow = node.getAttribute('role') === 'row' || node.querySelector('[data-pre-plain-text]') !== null;
+        if (isMessageRow && !node.classList.contains('message-out')) {
+            // If we're unsure, treat as potential message if it has text
+            return node.innerText.length > 0;
+        }
+
+        return false;
     }
 
     observeMessages(onMessage: (context: ChatContext) => void): void {
         this.disconnect();
 
+        // 1. WATCH FOR CHAT SWITCHES (Header title change)
+        const header = document.querySelector('header');
+        const mainPanel = document.querySelector('#main') || document.querySelector('[data-testid="conversation-panel-wrapper"]');
+
+        if (mainPanel) {
+            // Observer for chat switching (when #main is replaced or header changes)
+            const switchObserver = new MutationObserver(() => {
+                // If header changed or main panel content changed significantly, it's likely a chat switch
+                this.lastProcessedMessage = ''; // Reset processed state
+
+                // Wait slightly for DOM to settle then scan
+                if (this.debounceTimer) clearTimeout(this.debounceTimer);
+                this.debounceTimer = setTimeout(() => {
+                    const context = this.extractContext();
+                    if (context) {
+                        this.lastProcessedMessage = context.currentMessage;
+                        onMessage(context);
+                    }
+                }, 500);
+            });
+
+            switchObserver.observe(mainPanel, { childList: true, subtree: true, attributes: true, attributeFilter: ['title'] });
+            if (header) {
+                switchObserver.observe(header, { childList: true, subtree: true });
+            }
+            // Also store this observer effectively (we'll just use the main observer property for simplicity or add a new one if needed, 
+            // but for now let's combine logic or just let the main message observer handle it if we target right)
+        }
+
+        // 2. WATCH FOR NEW MESSAGES
         const chatContainerSelectors = [
             '[data-testid="conversation-panel-body"]',
             '[data-testid="conversation-panel-messages"]',
@@ -199,26 +257,21 @@ export class WhatsAppAdapter implements PlatformAdapter {
         }
 
         if (!chatContainer) {
-            // If no chat open, try observing body for chat open
-            const sidePanel = document.querySelector('[data-testid="conversation-panel-wrapper"]') || document.querySelector('#main');
-            if (sidePanel) {
-                const switchObserver = new MutationObserver((mutations) => {
-                    for (const mutation of mutations) {
-                        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-                            this.lastProcessedMessage = ''; // Reset on switch
-                            setTimeout(() => this.observeMessages(onMessage), 1000); // Re-init
-                            return;
-                        }
-                    }
-                });
-                switchObserver.observe(sidePanel, { childList: true });
-            }
+            // Retry observing if container not found yet (e.g. initial load)
+            setTimeout(() => this.observeMessages(onMessage), 2000);
             return;
         }
 
         this.observer = new MutationObserver((mutations) => {
             let hasNewMessage = false;
+            let isChatSwitch = false;
+
             mutations.forEach((mutation) => {
+                // Check for chat switch (large number of nodes added)
+                if (mutation.type === 'childList' && mutation.addedNodes.length > 5) {
+                    isChatSwitch = true;
+                }
+
                 mutation.addedNodes.forEach((node) => {
                     if (node instanceof HTMLElement && this.detectNewMessage(node)) {
                         hasNewMessage = true;
@@ -226,13 +279,20 @@ export class WhatsAppAdapter implements PlatformAdapter {
                 });
             });
 
+            if (isChatSwitch) {
+                this.lastProcessedMessage = ''; // Reset
+                hasNewMessage = true; // Force scan
+            }
+
             if (hasNewMessage) {
                 if (this.debounceTimer) clearTimeout(this.debounceTimer);
                 this.debounceTimer = setTimeout(() => {
                     const context = this.extractContext();
                     if (context && context.currentMessage !== this.lastProcessedMessage) {
                         this.lastProcessedMessage = context.currentMessage;
-                        if (context.currentMessage.trim().length >= 8) {
+                        // For chat switches, we might want to trigger even if short, but sticking to logic
+                        // If it's a valid message context, send it
+                        if (context.currentMessage.trim().length >= 2) { // Lowered threshold slightly
                             onMessage(context);
                         }
                     }
