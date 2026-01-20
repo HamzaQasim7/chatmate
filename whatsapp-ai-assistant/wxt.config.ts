@@ -8,24 +8,24 @@ export default defineConfig({
     permissions: ['storage', 'activeTab'],
     host_permissions: ['https://web.whatsapp.com/*', 'https://api.openai.com/*'],
     icons: {
-      16: 'icon.png',
-      32: 'icon.png',
-      48: 'icon.png',
-      128: 'icon.png',
+      16: 'reple-favicon.png',
+      32: 'reple-favicon.png',
+      48: 'reple-favicon.png',
+      128: 'reple-favicon.png',
     },
     action: {
       default_popup: 'popup.html',
       default_title: 'Reple',
       default_icon: {
-        16: 'icon.png',
-        32: 'icon.png',
-        48: 'icon.png',
+        16: 'reple-favicon.png',
+        32: 'reple-favicon.png',
+        48: 'reple-favicon.png',
       },
     },
     web_accessible_resources: [
       {
-        resources: ['icon.png', 'reple-logo.png', 'reple-icon.png'],
-        matches: ['https://web.whatsapp.com/*'],
+        resources: ['icon.png', 'reple-logo.png', 'reple-icon.png', 'reple-favicon.png'],
+        matches: ['https://web.whatsapp.com/*', 'https://app.slack.com/*'],
       },
     ],
   },

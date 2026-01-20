@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
+
+import { PlatformFactory } from '@/lib/platforms/factory';
+
 import {
   Quote,
   ChevronDown,
@@ -21,7 +24,7 @@ import {
   GripVertical,
   SendHorizontal
 } from 'lucide-react';
-import { insertTextToWhatsApp } from '@/lib/whatsapp';
+
 import { getSettings, saveSettings, getUsageStats } from '@/lib/storage';
 import type { Suggestion, ToneType, Settings, UsageStats } from '@/lib/types';
 import { TONE_CONFIG } from '@/lib/types';
@@ -118,6 +121,7 @@ const themes = {
 
 function FloatingPopup() {
   const [expanded, setExpanded] = useState(false);
+  const [currentContext, setCurrentContext] = useState<any>(null);
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
   const [loading, setLoading] = useState(false);
   const [lastMessage, setLastMessage] = useState('');
@@ -225,10 +229,17 @@ function FloatingPopup() {
           setHasNew(false);
           if (suggestions[0]?.type) setCurrentTone(suggestions[0].type);
         }
-      } else if (action === 'loading') {
-        setLoading(true);
-        setExpanded(true);
+      } else if (action === 'messageDetected') {
+        const ctx = data.context;
+        setCurrentContext(ctx);
+        setLastMessage(data.message || '');
+        setSuggestion(null); // Clear previous suggestion
+        setLoading(false);
+        setScanning(false);
         setError(null);
+
+        // Notify user of new message detection
+        if (!expanded) setHasNew(true);
       } else if (action === 'loading') {
         setLoading(true);
         setExpanded(true);
@@ -295,9 +306,14 @@ function FloatingPopup() {
     }
   };
 
+
+
   const handleInsert = () => {
     if (suggestion) {
-      insertTextToWhatsApp(suggestion.text);
+      const adapter = PlatformFactory.getAdapter();
+      if (adapter) {
+        adapter.insertText(suggestion.text);
+      }
       setExpanded(false);
     }
   };
@@ -323,6 +339,34 @@ function FloatingPopup() {
       }
     } finally {
       setRegenerating(false);
+    }
+  };
+
+  const handleGenerate = async () => {
+    if (!currentContext) return;
+
+    setLoading(true);
+    setError(null);
+    setExpanded(true); // Ensure expanded
+
+    try {
+      const response = await browser.runtime.sendMessage({
+        action: 'generateSuggestions',
+        data: currentContext
+      });
+
+      const suggestions = response?.suggestions || [];
+      if (suggestions.length > 0) {
+        setSuggestion(suggestions[0]);
+        if (suggestions[0].type) setCurrentTone(suggestions[0].type);
+      } else {
+        setError(response.error || 'No response generated');
+      }
+    } catch (err: any) {
+      console.error('Generation error:', err);
+      setError(err.message || 'Failed to generate');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -357,40 +401,46 @@ function FloatingPopup() {
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
-            padding: '12px 20px',
-            background: 'linear-gradient(135deg, #00f592 0%, #00d68f 100%)',
-            borderRadius: '25px',
-            boxShadow: '0 4px 20px rgba(0, 245, 146, 0.4)',
-            cursor: 'pointer',
-            color: 'white',
-            fontSize: '14px',
-            fontWeight: 600,
+            justifyContent: 'center',
+            padding: '0',
+            background: 'transparent',
             border: 'none',
-            animation: hasNew ? 'pulse 1s infinite' : 'none',
+            cursor: 'pointer',
+            filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.15))',
+            transition: 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
+            transform: hasNew ? 'scale(1.1)' : 'scale(1)',
           }}
+          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+          onMouseLeave={(e) => e.currentTarget.style.transform = hasNew ? 'scale(1.1)' : 'scale(1)'}
         >
           <img
-            src={browser.runtime.getURL('/reple-icon.png')}
+            src={browser.runtime.getURL('/reple-favicon.png')}
             alt=""
             style={{
-              width: '24px',
-              height: '24px',
+              width: '56px',
+              height: '56px',
               objectFit: 'contain',
-              background: 'white',
               borderRadius: '50%',
-              padding: '2px',
             }}
           />
 
           {hasNew && (
             <span style={{
+              position: 'absolute',
+              top: '-2px',
+              right: '-2px',
               background: '#FF3B30',
               color: 'white',
-              fontSize: '10px',
+              fontSize: '11px',
               fontWeight: 700,
-              padding: '2px 6px',
-              borderRadius: '10px',
+              minWidth: '20px',
+              height: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '50%',
+              border: '2px solid white',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
             }}>1</span>
           )}
         </button>
@@ -442,7 +492,7 @@ function FloatingPopup() {
           </div>
 
           <img
-            src={browser.runtime.getURL('/reple-icon.png')}
+            src={browser.runtime.getURL('/reple-favicon.png')}
             alt=""
             style={{
               height: '28px',
@@ -751,32 +801,64 @@ function FloatingPopup() {
             </div>
           )}
 
-          {/* Empty state */}
+          {/* Empty state / Generate Button */}
           {!loading && !suggestion && !error && (
-            <button
-              onClick={handleScanMessages}
-              disabled={scanning}
-              style={{
-                width: '100%',
-                padding: '14px',
-                borderRadius: '12px',
-                border: 'none',
-                background: 'linear-gradient(135deg, #00f592 0%, #00d68f 100%)',
-                color: 'white',
-                fontSize: '14px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                boxShadow: '0 4px 12px rgba(0, 245, 146, 0.3)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                opacity: scanning ? 0.7 : 1,
-              }}
-            >
-              {scanning ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : <MessageSquare size={18} />}
-              {scanning ? 'Scanning...' : 'Scan Messages'}
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {lastMessage ? (
+                /* Generate Button */
+                <button
+                  onClick={handleGenerate}
+                  style={{
+                    width: '100%',
+                    padding: '14px',
+                    borderRadius: '12px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #00f592 0%, #00d68f 100%)',
+                    color: 'white',
+                    fontSize: '15px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 15px rgba(0, 245, 146, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '10px',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+                  onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                  <MessageSquare size={18} fill="currentColor" />
+                  Generate Response
+                </button>
+              ) : (
+                /* Scan Button */
+                <button
+                  onClick={handleScanMessages}
+                  disabled={scanning}
+                  style={{
+                    width: '100%',
+                    padding: '14px',
+                    borderRadius: '12px',
+                    border: 'none',
+                    background: theme.actionsBarBg,
+                    color: theme.titleColor,
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    opacity: scanning ? 0.7 : 1,
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  {scanning ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={18} />}
+                  {scanning ? 'Scanning...' : 'Scan for Messages'}
+                </button>
+              )}
+            </div>
           )}
 
           {/* Error */}

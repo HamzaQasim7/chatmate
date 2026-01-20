@@ -42,7 +42,7 @@ export default function App() {
       <div className="bg-white border-b border-gray-100 p-5 sticky top-0 z-10 shadow-sm">
         <div className="flex items-center gap-3">
           <img
-            src="/reple-icon.png"
+            src="/reple-favicon.png"
             alt="Reple"
             className="w-10 h-10 object-contain drop-shadow-md"
           />
