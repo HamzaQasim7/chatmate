@@ -293,7 +293,13 @@ export class WhatsAppAdapter implements PlatformAdapter {
                         // For chat switches, we might want to trigger even if short, but sticking to logic
                         // If it's a valid message context, send it
                         if (context.currentMessage.trim().length >= 2) { // Lowered threshold slightly
-                            onMessage(context);
+                            try {
+                                onMessage(context);
+                            } catch (e: any) {
+                                if (e.message?.includes('Extension context invalidated')) {
+                                    this.disconnect();
+                                }
+                            }
                         }
                     }
                 }, 1000);
@@ -301,7 +307,40 @@ export class WhatsAppAdapter implements PlatformAdapter {
         });
 
         this.observer.observe(chatContainer, { childList: true, subtree: true });
-        this.debugLog('Observer initialized');
+
+        // 3. ROBUST CHAT SWITCH DETECTION (POLLING)
+        // MutationObservers can sometimes miss the "switch" event if the DOM is recycled.
+        // We poll the header title to detect a context switch reliably.
+        let lastTitle = '';
+        const pollInterval = setInterval(() => {
+            if (!this.observer) {
+                clearInterval(pollInterval);
+                return;
+            }
+
+            const headerTitle = document.querySelector('header span[title]')?.textContent || '';
+            if (headerTitle && headerTitle !== lastTitle) {
+                this.debugLog('Chat switch detected via Polling:', headerTitle);
+                lastTitle = headerTitle;
+                this.lastProcessedMessage = ''; // clear cache
+
+                // Force a scan
+                const context = this.extractContext();
+                if (context) {
+                    this.lastProcessedMessage = context.currentMessage;
+                    try {
+                        onMessage(context);
+                    } catch (e: any) {
+                        if (e.message?.includes('Extension context invalidated')) {
+                            clearInterval(pollInterval);
+                            this.disconnect();
+                        }
+                    }
+                }
+            }
+        }, 1000);
+
+        this.debugLog('Observer & Polling initialized');
     }
 
     disconnect(): void {

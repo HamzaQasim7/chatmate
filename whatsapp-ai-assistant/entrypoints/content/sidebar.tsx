@@ -17,12 +17,13 @@ import {
   MessageCircle,
   Target,
   Scale,
+  Zap,
+  SendHorizontal,
   FileText,
   Loader2,
   Sun,
   Moon,
-  GripVertical,
-  SendHorizontal
+  GripVertical
 } from 'lucide-react';
 
 import { getSettings, saveSettings, getUsageStats } from '@/lib/storage';
@@ -39,6 +40,7 @@ const ToneIcons: Record<ToneType, React.ReactNode> = {
   natural: <MessageCircle size={14} />,
   sales: <Target size={14} />,
   negotiator: <Scale size={14} />,
+  rainmaker: <Zap size={14} />,
 };
 
 // Tone colors (work for both themes)
@@ -49,9 +51,10 @@ const toneColors: Record<ToneType, { bg: string; border: string; text: string }>
   natural: { bg: 'rgba(52, 199, 89, 0.15)', border: 'rgba(52, 199, 89, 0.25)', text: '#34C759' },
   sales: { bg: 'rgba(255, 149, 0, 0.15)', border: 'rgba(255, 149, 0, 0.25)', text: '#FF9500' },
   negotiator: { bg: 'rgba(175, 82, 222, 0.15)', border: 'rgba(175, 82, 222, 0.25)', text: '#AF52DE' },
+  rainmaker: { bg: 'rgba(124, 58, 237, 0.15)', border: 'rgba(124, 58, 237, 0.3)', text: '#7C3AED' },
 };
 
-const toneList: ToneType[] = ['formal', 'friendly', 'professional', 'natural', 'sales', 'negotiator'];
+const toneList: ToneType[] = ['formal', 'friendly', 'professional', 'natural', 'sales', 'negotiator', 'rainmaker'];
 
 // Theme styles
 const themes = {

@@ -1,4 +1,4 @@
-export type ToneType = 'formal' | 'friendly' | 'professional' | 'natural' | 'sales' | 'negotiator';
+export type ToneType = 'formal' | 'friendly' | 'professional' | 'natural' | 'sales' | 'negotiator' | 'rainmaker';
 export type ModelType = 'reple-quick' | 'reple-smart' | 'reple-pro';
 
 export interface Settings {
@@ -93,5 +93,10 @@ export const TONE_CONFIG: Record<ToneType, { icon: string; label: string; descri
     icon: '🤝',
     label: 'Expert Negotiator',
     description: 'Strategic & diplomatic'
+  },
+  rainmaker: {
+    icon: '⚡',
+    label: 'The Rainmaker',
+    description: 'Expert Sales & Negotiation Strategy'
   },
 };

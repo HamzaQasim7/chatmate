@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Save, Check, Briefcase, Users, MessageCircle, Target, Scale, ChevronDown, Monitor, ClipboardList } from 'lucide-react';
+import { Save, Check, Briefcase, Users, MessageCircle, Target, Scale, Zap, ChevronDown, Monitor, ClipboardList } from 'lucide-react';
 import type { Settings, ToneType } from '@/lib/types';
 import { TONE_CONFIG, MODEL_CONFIG } from '@/lib/types';
 
@@ -16,6 +16,7 @@ const ToneIcons: Record<ToneType, React.ReactNode> = {
   natural: <MessageCircle size={22} />,
   sales: <Target size={22} />,
   negotiator: <Scale size={22} />,
+  rainmaker: <Zap size={22} />,
 };
 
 // Map colors for grid items
@@ -26,6 +27,7 @@ const ToneStyles: Record<ToneType, { bg: string, border: string, iconColor: stri
   natural: { bg: 'bg-violet-50', border: 'border-violet-200', iconColor: 'text-violet-600', iconBg: 'bg-violet-100' },
   sales: { bg: 'bg-rose-50', border: 'border-rose-200', iconColor: 'text-rose-600', iconBg: 'bg-rose-100' },
   negotiator: { bg: 'bg-amber-50', border: 'border-amber-200', iconColor: 'text-amber-600', iconBg: 'bg-amber-100' },
+  rainmaker: { bg: 'bg-gradient-to-br from-violet-100 to-fuchsia-100', border: 'border-violet-200', iconColor: 'text-violet-600', iconBg: 'bg-white' },
 };
 
 export const SettingsForm: React.FC<SettingsFormProps> = ({
@@ -41,7 +43,7 @@ export const SettingsForm: React.FC<SettingsFormProps> = ({
     setSaving(false);
   };
 
-  const tones: ToneType[] = ['formal', 'friendly', 'professional', 'natural', 'sales', 'negotiator'];
+  const tones: ToneType[] = ['formal', 'friendly', 'professional', 'natural', 'sales', 'negotiator', 'rainmaker'];
 
   return (
     <div className="p-5 space-y-6">
