@@ -1,16 +1,38 @@
 import { useState, useEffect } from 'react';
 import { SettingsForm } from '@/components/SettingsForm';
 import { getSettings, saveSettings } from '@/lib/storage';
+import { supabase } from '@/lib/supabase';
+import { LoginScreen } from './LoginScreen';
 import type { Settings } from '@/lib/types';
+import type { Session, AuthChangeEvent } from '@supabase/supabase-js';
 import './style.css';
 
 
 export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadSettings();
+    checkUser();
   }, []);
+
+  const checkUser = async () => {
+    // 1. Check local settings (Legacy)
+    await loadSettings();
+
+    // 2. Check Supabase Auth
+    const { data: { session } } = await supabase.auth.getSession();
+    setSession(session);
+    setLoading(false);
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  };
 
   const loadSettings = async () => {
     const data = await getSettings();
@@ -28,7 +50,7 @@ export default function App() {
     setTimeout(() => badge.remove(), 2000);
   };
 
-  if (!settings) {
+  if (loading || !settings) {
     return (
       <div className="w-full h-96 flex items-center justify-center bg-gray-50">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#00f592' }}></div>
@@ -36,10 +58,15 @@ export default function App() {
     );
   }
 
+  // Auth Guard
+  if (!session) {
+    return <LoginScreen onLoginSuccess={() => checkUser()} />;
+  }
+
   return (
     <div className="w-full h-[600px] overflow-y-auto bg-gray-50 font-sans">
       {/* Reple Header - Clean Modern Style */}
-      <div className="bg-white border-b border-gray-100 p-5 sticky top-0 z-10 shadow-sm">
+      <div className="bg-white border-b border-gray-100 p-5 sticky top-0 z-10 shadow-sm flex justify-between items-center">
         <div className="flex items-center gap-3">
           <img
             src="/reple-favicon.png"
@@ -53,6 +80,13 @@ export default function App() {
             <p className="text-xs font-medium text-gray-500 mt-0.5">AI Response Assistant</p>
           </div>
         </div>
+        <button
+          onClick={() => supabase.auth.signOut()}
+          className="text-xs text-slate-400 hover:text-red-500 transition-colors"
+          title="Sign Out"
+        >
+          Sign Out
+        </button>
       </div>
 
       <SettingsForm settings={settings} onSave={handleSave} />

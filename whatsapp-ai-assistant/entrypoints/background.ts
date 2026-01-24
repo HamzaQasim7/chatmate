@@ -1,12 +1,8 @@
-
 import { defineBackground } from 'wxt/utils/define-background';
-import OpenAI from 'openai';
-import { getSettings } from '@/lib/storage';
-import { checkAndResetUsage, incrementUsage } from '@/lib/storage';
-import { TONE_CONFIG, MODEL_CONFIG, type ChatContext, type Suggestion, type ToneType } from '@/lib/types';
-
-// FREE TIER API KEY (Now loaded from .env)
-const FREE_TIER_API_KEY = (import.meta as any).env.WXT_FREE_TIER_API_KEY || '';
+import { getSettings, getUsageStats } from '@/lib/storage';
+import { TONE_CONFIG, type ChatContext, type Suggestion, type ToneType } from '@/lib/types';
+import { generateReply } from '@/lib/api';
+import { supabase } from '@/lib/supabase';
 
 export default defineBackground({
   type: 'module',
@@ -14,27 +10,23 @@ export default defineBackground({
   async main() {
     console.log('[WhatsApp AI Background] Script loaded');
 
-    // Initialize settings if needed (optional logging)
-    const settings = await getSettings();
-    if (!settings.apiKey) {
-      console.log('[WhatsApp AI Background] No API key configured');
-    }
+    // Initialize settings if needed
+    await getSettings();
 
-    // Message listener with proper async response handling
+    // Message listener
     browser.runtime.onMessage.addListener((message: any, _sender: chrome.runtime.MessageSender, sendResponse: (response: any) => void) => {
       console.log('[WhatsApp AI Background] Received message:', message.action);
 
       if (message.action === 'generateSuggestions') {
         generateSuggestions(message.data)
           .then((response) => {
-            console.log('[WhatsApp AI Background] Sending response:', response);
             sendResponse(response);
           })
           .catch((error) => {
             console.error('[WhatsApp AI Background] Error:', error);
             sendResponse({ suggestions: [], error: error.message || 'Failed to generate suggestions' });
           });
-        return true; // Keep message channel open for async response
+        return true;
       }
 
       if (message.action === 'regenerate') {
@@ -42,8 +34,14 @@ export default defineBackground({
         getLastContext()
           .then((context) => context ? generateSuggestions(context, customInstruction, true) : { suggestions: [], error: 'No previous context found' })
           .then((response) => { sendResponse(response); })
-          .then((response) => { sendResponse(response); })
           .catch((error) => { sendResponse({ suggestions: [], error: error.message || 'Failed to regenerate' }); });
+        return true;
+      }
+
+      if (message.action === 'getUsage') {
+        fetchCurrentUsage()
+          .then((usageData) => { sendResponse(usageData); })
+          .catch(() => { sendResponse({ usage: 0, limit: 20 }); });
         return true;
       }
 
@@ -52,7 +50,7 @@ export default defineBackground({
   },
 });
 
-// Production-level system prompts for each tone
+// Production-level system prompts (Kept client-side for flexibility, passed to server)
 const TONE_PROMPTS: Record<ToneType, string> = {
   formal: `You are a Fortune 500 Executive. Write with absolute authority and brevity.
 CORE OBJECTIVE:
@@ -158,6 +156,7 @@ STYLE RULES:
 ANTI-PATTERNS (DO NOT DO):
 - Do not use the word "Why" (it sounds accusatory). Use "What" or "How".
 - Do not rush to a solution. Delaying can be leverage.
+- Do not argue facts before emotions.
 
 OUTPUT:
 One calculated, psychologically driven negotiation response that increases leverage or clarity.`,
@@ -191,174 +190,157 @@ OUTPUT:
 One high-status, maximum-revenue response.`,
 };
 
-async function generateSuggestions(context: ChatContext, customInstruction?: string, bypassCache: boolean = false): Promise<{ suggestions: Suggestion[]; error: string | null }> {
+async function generateSuggestions(context: ChatContext, customInstruction?: string, bypassCache: boolean = false): Promise<{ suggestions: Suggestion[]; error: string | null; usage?: number; limit?: number }> {
   try {
     console.log('[WhatsApp AI Background] Generating suggestions for:', context.currentMessage.substring(0, 50));
 
     const settings = await getSettings();
-
-    // BYOK LOGIC:
-    // 1. If user has custom key -> Unlimited usage
-    // 2. If no custom key -> Use Free Tier Key + Enforce Limit
-
-    let activeApiKey = settings.apiKey;
-    let isFreeTier = false;
-
-    if (!activeApiKey) {
-      // Use Free Tier
-      activeApiKey = FREE_TIER_API_KEY;
-      isFreeTier = true;
-
-      if (activeApiKey === 'YOUR_OPENAI_API_KEY_HERE') {
-        return { error: 'Admin has not configured the Free Tier API Key yet.', suggestions: [] };
-      }
-
-      // CHECK USAGE LIMIT ONLY FOR FREE TIER
-      const usage = await checkAndResetUsage();
-      if (usage.count >= 20) {
-        return { error: 'Free monthly limit reached (20/20). Add your own API Key for unlimited usage.', suggestions: [] };
-      }
-    } else {
-      console.log('[WhatsApp AI Background] Using User Custom API Key (Unlimited)');
-    }
-
-    const openai = new OpenAI({
-      apiKey: activeApiKey,
-      dangerouslyAllowBrowser: true,
-    });
-
     const tone = settings.tone || 'professional';
 
-    // CACHE CHECK (Skip if bypassCache is true)
+    // 1. CACHE CHECK
     const cacheKey = generateCacheKey(tone, customInstruction || '', context.currentMessage);
     if (!bypassCache) {
       const cachedResponse = await getCachedResponse(cacheKey);
       if (cachedResponse) {
-        console.log('[WhatsApp AI Background] Cache hit for:', cacheKey);
-
+        console.log('[WhatsApp AI Background] Cache hit');
         const validTone = (TONE_CONFIG[tone] ? tone : 'professional') as ToneType;
-        const suggestion: Suggestion = {
-          id: '1',
-          type: validTone,
-          text: cachedResponse,
-          icon: '',
+        // Fetch current usage to return with cache hit
+        const storedUsage = await getUsageStats();
+        return {
+          suggestions: [{ id: '1', type: validTone, text: cachedResponse, icon: '' }],
+          error: null,
+          usage: storedUsage?.count,
+          limit: storedUsage?.limit
         };
-        return { suggestions: [suggestion], error: null };
       }
     }
 
+    // 2. PREPARE PROMPT
     const systemPrompt = getSystemPrompt(tone, settings.language);
-    const userPrompt = buildUserPrompt(context, customInstruction);
 
-    console.log('[WhatsApp AI Background] Using tone:', tone);
-    console.log('[WhatsApp AI Background] Calling OpenAI API...');
+    // 3. CALL SERVER API (Secure)
+    console.log('[WhatsApp AI Background] Calling Server API...'); const messages = context.previousMessages.map(msg => ({ role: 'user', content: msg }));
+    messages.push({ role: 'user', content: `CLIENT(${context.senderName}) JUST SENT: "${context.currentMessage}"` });
 
-    const response = await openai.chat.completions.create({
-      model: (MODEL_CONFIG[settings.model]?.openAIModel || MODEL_CONFIG['reple-smart'].openAIModel),
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0.7,
-      max_tokens: 300,
-    });
-
-    const content = response.choices[0]?.message?.content || '';
-    console.log('[WhatsApp AI Background] AI Response:', content.substring(0, 100));
-
-    // Clean up the response - remove quotes, labels, etc.
-    const cleanedResponse = cleanResponse(content);
-
-    const validTone = (TONE_CONFIG[tone] ? tone : 'professional') as ToneType;
-    const suggestion: Suggestion = {
-      id: '1',
-      type: validTone,
-      text: cleanedResponse,
-      icon: '', // Icon is handled by the UI based on type
-    };
-
-    // Save to cache (Always save/overwrite new generation)
-    await saveResponseToCache(cacheKey, cleanedResponse);
-
-    // Increment usage count ONLY if using free tier
-    if (isFreeTier) {
-      await incrementUsage();
-      const stats = await checkAndResetUsage();
-      // Broadcast usage update to all tabs
-      try {
-        const tabs = await browser.tabs.query({ url: '*://web.whatsapp.com/*' });
-        for (const tab of tabs) {
-          if (tab.id) {
-            browser.tabs.sendMessage(tab.id, { action: 'usageUpdated', stats }).catch(() => { });
-          }
-        }
-      } catch (e) { console.error('Failed to broadcast usage update', e); }
+    let finalPrompt = systemPrompt;
+    if (customInstruction) {
+      finalPrompt += `\nUSER INSTRUCTION: ${customInstruction}\nFollow this instruction strictly.`;
     }
 
+    const { reply, limit } = await generateReply({
+      messages: messages,
+      tone: tone,
+      prompt: finalPrompt
+    });
+
+    console.log('[WhatsApp AI Background] Server Response:', reply.substring(0, 20));
+
+    // Fetch authoritative usage count directly from DB to avoid race conditions/stale data
+    const { data: { session } } = await supabase.auth.getSession();
+    let finalUsage = 0;
+
+    if (session?.user) {
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+
+      const { count } = await supabase
+        .from('usage_logs')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', session.user.id)
+        .gte('created_at', startOfMonth.toISOString());
+
+      finalUsage = count || 0;
+    }
+
+    console.log('[WhatsApp AI Background] Usage (DB):', finalUsage, '/', limit);
+
+    // ALWAYS update Usage Stats in Storage (so UI can react via storage listener)
+    const finalLimit = limit ?? 20;
+    await browser.storage.local.set({
+      usageStats: { count: finalUsage, limit: finalLimit, lastReset: Date.now() }
+    });
+    console.log('[WhatsApp AI Background] Saved to storage:', { count: finalUsage, limit: finalLimit });
+
+    const cleanedResponse = cleanResponse(reply);
+
+    // 4. CACHE & RETURN
+    await saveResponseToCache(cacheKey, cleanedResponse);
     await saveLastContext(context);
 
-    return { suggestions: [suggestion], error: null };
+    const validTone = (TONE_CONFIG[tone] ? tone : 'professional') as ToneType;
+    return {
+      suggestions: [{ id: '1', type: validTone, text: cleanedResponse, icon: '' }],
+      error: null,
+      usage: finalUsage,
+      limit: limit
+    };
+
   } catch (error: any) {
-    console.error('[WhatsApp AI Background] OpenAI API error:', error);
-    return { error: formatError(error), suggestions: [] };
+    console.error('[WhatsApp AI Background] API error:', error);
+    return { error: error.message || 'Failed to generate', suggestions: [] };
   }
 }
 
+// Fetch current usage from database
+async function fetchCurrentUsage(): Promise<{ usage: number; limit: number }> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session?.user) {
+      return { usage: 0, limit: 20 };
+    }
+
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const { count } = await supabase
+      .from('usage_logs')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', session.user.id)
+      .gte('created_at', startOfMonth.toISOString());
+
+    const { data: subscription } = await supabase
+      .from('subscriptions')
+      .select('plan_id')
+      .eq('user_id', session.user.id)
+      .single();
+
+    const limit = subscription?.plan_id === 'pro' ? 1000 : 20;
+    const usage = count || 0;
+
+    // Also update local storage
+    await browser.storage.local.set({
+      usageStats: { count: usage, limit: limit, lastUpdated: Date.now() }
+    });
+
+    return { usage, limit };
+  } catch (e) {
+    console.error('[Background] Error fetching usage:', e);
+    return { usage: 0, limit: 20 };
+  }
+}
+
+// Helper functions remain mostly same, simplified buildUserPrompt as it's now handled by logic above
 function getSystemPrompt(tone: ToneType, language: string): string {
   let basePrompt = TONE_PROMPTS[tone] || TONE_PROMPTS.professional;
-
-  // Add language instruction
   if (language === 'ur') {
     basePrompt += '\n\nIMPORTANT: Respond in Urdu (you may use Roman Urdu script).';
   } else if (language === 'mixed') {
-    basePrompt += '\n\nIMPORTANT: Respond in a natural mix of English and Urdu (Roman Urdu is acceptable). This is common in Pakistani business communication.';
+    basePrompt += '\n\nIMPORTANT: Respond in a natural mix of English and Urdu (Roman Urdu is acceptable).';
   }
-
   return basePrompt;
-}
-
-function buildUserPrompt(context: ChatContext, customInstruction?: string): string {
-  let prompt = '';
-
-  if (context.previousMessages.length > 0) {
-    prompt += `CONVERSATION CONTEXT: \n${context.previousMessages.slice(-5).join('\n')} \n\n`;
-  }
-
-  prompt += `CLIENT(${context.senderName}) JUST SENT: \n"${context.currentMessage}"\n\n`;
-
-  if (customInstruction) {
-    prompt += `USER INSTRUCTION: ${customInstruction} \n\n`;
-    prompt += `Follow the USER INSTRUCTION above to modify your response. `;
-  }
-
-  prompt += `Generate ONE response based on your instructions.Output ONLY the response text, nothing else - no labels, no quotes, no explanations.`;
-
-  return prompt;
 }
 
 function cleanResponse(response: string): string {
   let cleaned = response.trim();
-
-  // Remove common prefixes/labels
   cleaned = cleaned.replace(/^(Response:|Reply:|Here's|Here is|My response:|Suggested response:)/i, '').trim();
-
-  // Remove surrounding quotes
   if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
     cleaned = cleaned.slice(1, -1);
   }
-
-  // Remove markdown formatting
   cleaned = cleaned.replace(/\*\*/g, '').replace(/\*/g, '');
-
   return cleaned.trim();
-}
-
-function formatError(error: any): string {
-  if (error.status === 401) return 'Invalid API key. Please check your settings.';
-  if (error.status === 429) return 'Rate limit exceeded. Please wait a moment.';
-  if (error.status === 500) return 'OpenAI service error. Please try again.';
-  if (error.message) return error.message;
-  return 'Failed to generate suggestions. Please try again.';
 }
 
 async function saveLastContext(context: ChatContext): Promise<void> {
@@ -371,37 +353,25 @@ async function getLastContext(): Promise<ChatContext | null> {
 }
 
 // --- Caching Logic ---
-
 async function getCachedResponse(key: string): Promise<string | null> {
   try {
     const result = await browser.storage.local.get('responseCache');
-    const cache = result.responseCache || {};
-    return cache[key] || null;
-  } catch (e) {
-    return null;
-  }
+    return (result.responseCache || {})[key] || null;
+  } catch (e) { return null; }
 }
 
 async function saveResponseToCache(key: string, response: string): Promise<void> {
   try {
     const result = await browser.storage.local.get('responseCache');
     const cache = result.responseCache || {};
-
-    // Limit cache size (simple LRU-like: just delete if too big)
     const keys = Object.keys(cache);
-    if (keys.length > 50) {
-      delete cache[keys[0]]; // Remove oldest (roughly)
-    }
-
+    if (keys.length > 50) delete cache[keys[0]];
     cache[key] = response;
     await browser.storage.local.set({ responseCache: cache });
-  } catch (e) {
-    console.error('Cache save error', e);
-  }
+  } catch (e) { console.error('Cache save error', e); }
 }
 
 function generateCacheKey(tone: string, instruction: string, message: string): string {
-  // Simple hash-like key
   const safeMessage = message.slice(0, 50).replace(/[^a-zA-Z0-9]/g, '');
   return `${tone}_${instruction.slice(0, 10)}_${safeMessage}_${message.length} `;
 }

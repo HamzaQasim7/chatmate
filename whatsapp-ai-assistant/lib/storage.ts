@@ -13,6 +13,7 @@ function getStorageAPI() {
 
 const DEFAULT_USAGE: UsageStats = {
   count: 0,
+  limit: 20,
   lastReset: Date.now(),
 };
 

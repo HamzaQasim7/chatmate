@@ -168,6 +168,7 @@ function FloatingPopup() {
       setCurrentTone(settings.tone);
       setHasCustomKey(!!settings.apiKey);
 
+      // Read usage from local storage
       const stats = await getUsageStats();
       setUsage(stats);
     };
@@ -177,7 +178,19 @@ function FloatingPopup() {
     const centerX = (window.innerWidth - 420) / 2;
     setPosition({ x: centerX, y: 80 });
 
-    return () => { document.head.removeChild(styleSheet); };
+    // Listen for storage changes (real-time updates)
+    const storageListener = (changes: { [key: string]: { oldValue?: any; newValue?: any } }, areaName: string) => {
+      if (areaName === 'local' && changes.usageStats?.newValue) {
+        console.log('[Sidebar] Usage updated from storage:', changes.usageStats.newValue);
+        setUsage(changes.usageStats.newValue);
+      }
+    };
+    browser.storage.onChanged.addListener(storageListener);
+
+    return () => {
+      document.head.removeChild(styleSheet);
+      browser.storage.onChanged.removeListener(storageListener);
+    };
   }, []);
 
   // Drag handlers
@@ -517,7 +530,7 @@ function FloatingPopup() {
                 borderRadius: '10px',
                 border: `1px solid ${theme.headerBorder}`,
               }}>
-                {Math.max(0, 20 - usage.count)}/20
+                {usage.count}/{usage.limit || 20}
               </span>
             )}
           </span>

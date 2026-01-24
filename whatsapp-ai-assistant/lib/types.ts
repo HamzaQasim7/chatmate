@@ -33,6 +33,7 @@ export const MODEL_CONFIG: Record<ModelType, { label: string; description: strin
 
 export interface UsageStats {
   count: number;
+  limit?: number;
   lastReset: number; // timestamp
 }
 
@@ -60,6 +61,8 @@ export interface ChatContext {
 export interface APIResponse {
   suggestions: Suggestion[];
   error?: string;
+  usage?: number;
+  limit?: number;
 }
 
 // Tone configuration with icons and labels
