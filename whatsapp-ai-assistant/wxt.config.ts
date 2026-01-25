@@ -4,8 +4,8 @@ export default defineConfig({
   manifest: {
     name: 'Reple - AI Reply Assistant',
     description: 'Smart AI-powered response suggestions like you',
-    version: '1.1.0',
-    permissions: ['storage', 'activeTab', 'identity'],
+    version: '1.2.1',
+    permissions: ['storage', 'activeTab', 'identity', 'webNavigation', 'tabs'],
     host_permissions: ['https://web.whatsapp.com/*', 'https://app.slack.com/*', 'https://www.linkedin.com/*', 'https://api.openai.com/*'],
     icons: {
       128: 'reple-favicon.png',

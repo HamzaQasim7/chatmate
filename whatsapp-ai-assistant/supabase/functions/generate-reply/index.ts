@@ -30,36 +30,65 @@ serve(async (req) => {
 
         if (!user) throw new Error('Unauthorized')
 
-        // 2. CHECK LIMITS (The Business Logic)
-        const { data: subscription } = await supabaseClient
-            .from('subscriptions')
-            .select('plan_id, status')
-            .eq('user_id', user.id)
-            .single()
+        // 2. PARSE REQUEST (Moved up to access apiKey)
+        const { messages, tone, prompt, model, apiKey: rawUserApiKey } = await req.json()
 
-        const currentMonth = new Date().toISOString().slice(0, 7) // '2026-01'
+        // Clean the user key (trim whitespace)
+        const userApiKey = rawUserApiKey?.trim?.();
 
-        // Count usage for this month
-        const { count } = await supabaseClient
-            .from('usage_logs')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', user.id)
-            .gte('created_at', `${currentMonth}-01`)
+        // 3. CHECK LIMITS (The Business Logic)
+        // If user provides their OWN key, they are exempt from limits.
+        let usage = 0;
+        let limit = 20;
 
-        const limit = subscription?.plan_id === 'pro' ? 1000 : 20
-        const usage = count || 0
+        if (!userApiKey) {
+            const { data: subscription } = await supabaseClient
+                .from('subscriptions')
+                .select('plan_id, status')
+                .eq('user_id', user.id)
+                .single()
 
-        if (usage >= limit) {
-            return new Response(
-                JSON.stringify({ error: 'Limit exceeded', message: 'Please upgrade to Pro' }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 402 }
-            )
+            const currentMonth = new Date().toISOString().slice(0, 7) // '2026-01'
+
+            // Count usage for this month
+            const { count } = await supabaseClient
+                .from('usage_logs')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', user.id)
+                .gte('created_at', `${currentMonth}-01`)
+
+            limit = subscription?.plan_id === 'pro' ? 1000 : 20
+            usage = count || 0
+
+            if (usage >= limit) {
+                return new Response(
+                    JSON.stringify({ error: 'Limit exceeded', message: 'Please upgrade to Pro' }),
+                    { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 402 }
+                )
+            }
         }
 
-        // 3. AI GENERATION (OpenAI)
-        const { messages, tone, prompt } = await req.json()
-        const apiKey = Deno.env.get('OPENAI_API_KEY')
-        if (!apiKey) throw new Error('Server Config Error: OPENAI_API_KEY missing')
+        // 4. AI GENERATION (OpenAI)
+        let apiKey = userApiKey;
+        let finalModel = model;
+
+        if (apiKey) {
+            // PRO TIER (User Key)
+            console.log('[Generate Reply] Using USER KEY');
+            const allowedModels = ['gpt-5-nano', 'gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini', 'gpt-4o'];
+            finalModel = allowedModels.includes(model) ? model : 'gpt-4.1-mini';
+        } else {
+            // FREE TIER (Server Key)
+            console.log('[Generate Reply] Using SERVER KEY (Free Tier)');
+            finalModel = 'gpt-4o-mini';
+
+            apiKey = Deno.env.get('OPENAI_API_KEY')?.trim();
+            if (!apiKey) throw new Error('Server Config Error: OPENAI_API_KEY missing');
+        }
+
+        console.log('[Generate Reply] Final Model:', finalModel);
+        if (apiKey) console.log('[Generate Reply] Key Prefix:', apiKey.substring(0, 10) + '...');
+
 
         // Construct full message history for OpenAI
         const fullMessages = [
@@ -74,7 +103,7 @@ serve(async (req) => {
                 'Authorization': `Bearer ${apiKey}`
             },
             body: JSON.stringify({
-                model: 'gpt-4o-mini', // Cost-effective default
+                model: finalModel,
                 messages: fullMessages,
                 temperature: 0.7,
                 max_tokens: 300

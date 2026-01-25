@@ -1,7 +1,7 @@
 {
   "name": "whatsapp-ai-assistant",
-  "version": "1.0.0",
-  "description": "AI-powered response suggestions for WhatsApp Web",
+  "version": "1.2.1",
+  "description": "Smart AI-powered response suggestions",
   "type": "module",
   "scripts": {
     "dev": "wxt",

@@ -4,6 +4,8 @@ interface GenerateReplyParams {
     messages: { role: string; content: string }[];
     tone?: string;
     prompt?: string;
+    model?: string;
+    apiKey?: string;
 }
 
 export const generateReply = async (params: GenerateReplyParams): Promise<{ reply: string; usage?: number; limit?: number }> => {
@@ -19,14 +21,25 @@ export const generateReply = async (params: GenerateReplyParams): Promise<{ repl
     });
 
     if (error) {
-        console.error('Edge Function Error:', error);
+        console.error('Edge Function Error Object:', error);
+
+        // Try to parse the error body if hidden in the context/response
+        const errorBody = error.context ? await error.context.json().catch(() => null) : null;
+        console.error('Edge Function Error Body:', errorBody);
+
+        const activeMessage = errorBody?.error || error.message || 'Failed to generate reply';
 
         // Handle Limit Exceeded specifically
         if (error.context?.status === 402 || error.status === 402) {
             throw new Error('Usage limit reached. Please upgrade to Pro.');
         }
 
-        throw new Error(error.message || 'Failed to generate reply');
+        // Specific error for model issues
+        if (activeMessage.includes('model') && activeMessage.includes('not exist')) {
+            throw new Error(`The model '${params.model}' is not available for your API key.`);
+        }
+
+        throw new Error(activeMessage);
     }
 
     return {

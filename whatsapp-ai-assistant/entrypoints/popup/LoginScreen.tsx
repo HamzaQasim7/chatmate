@@ -24,56 +24,46 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     }, [onLoginSuccess]);
 
     const handleGoogleLogin = async () => {
-        try {
-            setLoading(true);
-            setError(null);
+        setLoading(true);
+        setError(null);
+        setMessage('Opening Google Sign-In...');
 
-            // 1. Get the OAuth URL from Supabase
-            const { data, error } = await supabase.auth.signInWithOAuth({
-                provider: 'google',
-                options: {
-                    queryParams: {
-                        access_type: 'offline',
-                        prompt: 'consent',
-                    },
-                    redirectTo: browser.identity.getRedirectURL(),
-                    skipBrowserRedirect: true,
-                },
-            });
+        // Trigger OAuth in background (opens new tab)
+        console.log('[LoginScreen] Sending loginWithGoogle message to background');
+        await browser.runtime.sendMessage({ action: 'loginWithGoogle' });
 
-            if (error) throw error;
-            if (!data?.url) throw new Error('No OAuth URL returned');
+        // OAuth opens in new tab - popup should poll for session
+        // Show friendly message instead of expecting immediate result
+        setMessage('Finishing sign-in... you can close this window if it takes too long.');
 
-            // 2. Launch Web Auth Flow
-            const redirectUrl = await browser.identity.launchWebAuthFlow({
-                url: data.url,
-                interactive: true,
-            });
+        // Poll storage for session (background will store it after OAuth completes)
+        const maxAttempts = 30;
+        for (let i = 0; i < maxAttempts; i++) {
+            await new Promise((r) => setTimeout(r, 1000));
 
-            if (redirectUrl) {
-                // 3. Parse the URL to get the session (access_token, refresh_token)
-                // The URL will look like: https://<id>.chromiumapp.org/#access_token=...&refresh_token=...
-                const params = new URLSearchParams(redirectUrl.split('#')[1]);
-                const accessToken = params.get('access_token');
-                const refreshToken = params.get('refresh_token');
-
-                if (accessToken) {
-                    const { error: sessionError } = await supabase.auth.setSession({
-                        access_token: accessToken,
-                        refresh_token: refreshToken || '',
-                    });
-                    if (sessionError) throw sessionError;
-
-                    onLoginSuccess();
-                } else {
-                    throw new Error('No access token found in redirect URL');
-                }
+            // Check storage for session
+            const { authSession } = await browser.storage.local.get('authSession');
+            console.log(`[LoginScreen] Poll ${i + 1}: Storage:`, authSession ? 'FOUND' : 'none');
+            if (authSession) {
+                setMessage(null);
+                onLoginSuccess();
+                return;
             }
-        } catch (err: any) {
-            console.error('Login error:', err);
-            setError(err.message || 'Failed to login');
-            setLoading(false);
+
+            // Also check Supabase directly
+            const { data: { session } } = await supabase.auth.getSession();
+            console.log(`[LoginScreen] Poll ${i + 1}: Supabase:`, session ? 'FOUND' : 'none');
+            if (session) {
+                await browser.storage.local.set({ authSession: session });
+                setMessage(null);
+                onLoginSuccess();
+                return;
+            }
         }
+
+        // Timeout - but don't show error, session might still appear
+        setMessage('Sign-in is taking longer than expected. Please try again.');
+        setLoading(false);
     };
 
     const handleEmailAuth = async (e: React.FormEvent) => {

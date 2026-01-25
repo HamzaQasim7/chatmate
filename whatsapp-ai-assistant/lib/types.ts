@@ -13,20 +13,20 @@ export interface Settings {
 export const MODEL_CONFIG: Record<ModelType, { label: string; description: string; openAIModel: string; isPro: boolean }> = {
   'reple-quick': {
     label: 'Reple Quick',
-    description: 'Fast replies',
-    openAIModel: 'gpt-3.5-turbo',
+    description: 'Fastest & cheapest',
+    openAIModel: 'gpt-5-nano',
     isPro: false
   },
   'reple-smart': {
     label: 'Reple Smart',
     description: 'Best balance',
-    openAIModel: 'gpt-4o-mini',
+    openAIModel: 'gpt-4.1-mini',
     isPro: false
   },
   'reple-pro': {
     label: 'Reple Pro',
     description: 'Highest quality',
-    openAIModel: 'gpt-4o',
+    openAIModel: 'gpt-4.1',
     isPro: true
   }
 };

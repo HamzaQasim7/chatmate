@@ -1,14 +1,18 @@
 import { defineBackground } from 'wxt/utils/define-background';
 import { getSettings, getUsageStats } from '@/lib/storage';
-import { TONE_CONFIG, type ChatContext, type Suggestion, type ToneType } from '@/lib/types';
+import { TONE_CONFIG, MODEL_CONFIG, type ChatContext, type Suggestion, type ToneType } from '@/lib/types';
 import { generateReply } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
+import { loginWithGoogle, logout, initAuthListeners } from '@/lib/auth';
 
 export default defineBackground({
   type: 'module',
 
   async main() {
     console.log('[WhatsApp AI Background] Script loaded');
+
+    // Initialize auth listeners (OAuth redirect capture)
+    initAuthListeners();
 
     // Initialize settings if needed
     await getSettings();
@@ -42,6 +46,21 @@ export default defineBackground({
         fetchCurrentUsage()
           .then((usageData) => { sendResponse(usageData); })
           .catch(() => { sendResponse({ usage: 0, limit: 20 }); });
+        return true;
+      }
+
+      // ========== AUTH ORCHESTRATOR ==========
+      if (message.action === 'loginWithGoogle') {
+        loginWithGoogle()
+          .then((result) => { sendResponse(result); })
+          .catch((error) => { sendResponse({ success: false, error: error.message }); });
+        return true;
+      }
+
+      if (message.action === 'logout') {
+        logout()
+          .then(() => { sendResponse({ success: true }); })
+          .catch((error) => { sendResponse({ success: false, error: error.message }); });
         return true;
       }
 
@@ -218,6 +237,13 @@ async function generateSuggestions(context: ChatContext, customInstruction?: str
     // 2. PREPARE PROMPT
     const systemPrompt = getSystemPrompt(tone, settings.language);
 
+    // Resolve OpenAI model ID
+    const modelConfig = MODEL_CONFIG[settings.model || 'reple-smart'];
+    // Fallback to safe default if config missing
+    const openAIModel = modelConfig ? modelConfig.openAIModel : 'gpt-4.1-mini';
+
+    console.log('[WhatsApp AI Background] Using Model:', openAIModel);
+
     // 3. CALL SERVER API (Secure)
     console.log('[WhatsApp AI Background] Calling Server API...'); const messages = context.previousMessages.map(msg => ({ role: 'user', content: msg }));
     messages.push({ role: 'user', content: `CLIENT(${context.senderName}) JUST SENT: "${context.currentMessage}"` });
@@ -230,7 +256,9 @@ async function generateSuggestions(context: ChatContext, customInstruction?: str
     const { reply, limit } = await generateReply({
       messages: messages,
       tone: tone,
-      prompt: finalPrompt
+      prompt: finalPrompt,
+      model: openAIModel,
+      apiKey: settings.apiKey // Pass user key if present
     });
 
     console.log('[WhatsApp AI Background] Server Response:', reply.substring(0, 20));
