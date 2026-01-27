@@ -11,7 +11,7 @@
 | 1 | The Problem | **S**tage | Carousel (Relatable pain) |
 | 2 | The Pain Deepens | **T**ension | Reel/Video |
 | 3 | What If? | **O**pportunity | Carousel (Vision) |
-| 4 | Meet Your 6 Experts | **R**esolution | Carousel (Feature) |
+| 4 | Meet Your 7 Experts | **R**esolution | Carousel (Feature) |
 | 5 | Why We Built This | Trust | Single Image + Story |
 | 6 | The Transformation | Social Proof | Before/After Carousel |
 | 7 | Your Move | **Y**es (CTA) | Reel + Action |
@@ -72,7 +72,7 @@ Tomorrow: Why this problem is WORSE than you think.
 ONE wrong tone can cost you a deal, a client, a reputation."
 
 [CLIFFHANGER]
-"But what if you had 6 experts helping you get it right?"
+"But what if you had 7 experts helping you get it right?"
 "Tomorrow."
 ```
 
@@ -86,7 +86,7 @@ Every word you send IS your brand.
 → 35% of deals die from slow/poor follow-ups
 → 1 wrong tone can undo months of relationship building
 
-Tomorrow: The solution exists. And it has 6 experts.
+Tomorrow: The solution exists. And it has 7 experts.
 
 #SalesStrategy #CustomerExperience #BusinessCommunication
 ```
@@ -94,19 +94,20 @@ Tomorrow: The solution exists. And it has 6 experts.
 ---
 
 ## DAY 3: OPPORTUNITY
-### Theme: *"Imagine Having 6 Communication Experts"*
+### Theme: *"Imagine Having 7 Communication Experts"*
 
 **Content Type:** Carousel (7 slides)
 
 | Slide | Expert | Description |
 |-------|--------|-------------|
-| 1 | Overview | "What if you had 6 communication experts?" |
+| 1 | Overview | "What if you had 7 communication experts?" |
 | 2 | 📋 Formal | "THE EXECUTIVE: Authoritative & commanding" |
 | 3 | 😊 Friendly | "THE FRIEND: Warm & human" |
 | 4 | 💼 Professional | "THE CONSULTANT: Reliable & competent" |
 | 5 | 🎯 Sales Expert | "THE ADVISOR: Persuasive & strategic" |
 | 6 | 🤝 Negotiator | "THE DIPLOMAT: Calculated & psychological" |
-| 7 | CTA | "Meet Reple. All 6 experts. One extension." |
+| 7 | ⚡ Rainmaker | "THE CLOSER: High-status & maximum revenue" |
+| 8 | CTA | "Meet Reple. All 7 experts. One extension." |
 
 **Caption:**
 ```
@@ -118,6 +119,7 @@ What if you never had to guess the right tone again?
 💬 THE NATURAL → When you need authenticity
 🎯 THE ADVISOR → When you need persuasion
 🤝 THE DIPLOMAT → When you need strategy
+⚡ THE RAINMAKER → When you need to CLOSE
 
 This isn't generic AI. This is context-aware communication coaching.
 
@@ -127,7 +129,7 @@ This isn't generic AI. This is context-aware communication coaching.
 ---
 
 ## DAY 4: RESOLUTION
-### Theme: *"Meet Reple: Your 6-Expert AI Team"*
+### Theme: *"Meet Reple: Your 7-Expert AI Team"*
 
 **Content Type:** Carousel (How It Works)
 
@@ -135,7 +137,7 @@ This isn't generic AI. This is context-aware communication coaching.
 |-------|---------|
 | 1 | **"Meet Reple"** - AI Reply Assistant |
 | 2 | Step 1: Open WhatsApp Web or Slack |
-| 3 | Step 2: Pick your tone (6 options) |
+| 3 | Step 2: Pick your tone (7 options) |
 | 4 | Step 3: Click "Generate Response" |
 | 5 | Step 4: Customize ("Make it shorter") |
 | 6 | Step 5: Click "Use This" → Inserted |
@@ -146,9 +148,10 @@ This isn't generic AI. This is context-aware communication coaching.
 ```
 Stop staring. Start sending.
 
-Reple gives you AI-powered responses in 6 tones:
+Reple gives you AI-powered responses in 7 tones:
 📋 Formal | 😊 Friendly | 💼 Professional
 💬 Natural | 🎯 Sales Expert | 🤝 Negotiator
+⚡ Rainmaker
 
 How it works:
 1️⃣ Open WhatsApp or Slack
@@ -185,12 +188,13 @@ Every message felt like a test:
 We tried templates. Too rigid.
 We tried AI tools. Too generic.
 
-So we asked: What if AI could learn SIX distinct communication styles?
+So we asked: What if AI could learn SEVEN distinct communication styles?
 
 That's why every tone in Reple is purpose-built:
 → Formal: Trained on executive communication
 → Sales Expert: Trained on persuasion psychology
 → Negotiator: Trained on strategic diplomacy
+→ Rainmaker: Trained on closing deals
 
 Built by people who understand message anxiety.
 For people who never want to feel it again.
@@ -211,7 +215,7 @@ Link in bio
 |------------|-----------|
 | 15 min deciding what to write | Response in 30 seconds |
 | "Did I sound too pushy?" anxiety | Confidence in every send |
-| One generic tone for everything | 6 tones for every situation |
+| One generic tone for everything | 7 tones for every situation |
 | Missed follow-ups | 3x faster communication |
 | Procrastination | Instant suggestions |
 
@@ -224,7 +228,7 @@ Life before Reple:
 
 Life after Reple:
 ✅ Response suggestions in seconds
-✅ 6 tones to match every situation
+✅ 7 tones to match every situation
 ✅ Confidence in every message
 
 The transformation isn't just about speed.
@@ -250,7 +254,7 @@ Free 20 responses/month. Link in bio.
 "This week I showed you:
 - Why message anxiety is real
 - The cost of wrong tones
-- The 6 experts you need
+- The 7 experts you need
 - How Reple works"
 
 [THE ASK]
@@ -275,7 +279,7 @@ Now it's your turn.
 
 Reple - AI Reply Assistant
 
-✅ 6 Expert Tones
+✅ 7 Expert Tones
 ✅ WhatsApp + Slack
 ✅ 20 Free Responses/Month
 ✅ 60-Second Install

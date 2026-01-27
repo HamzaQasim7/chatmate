@@ -13,7 +13,7 @@ export interface Settings {
 export const MODEL_CONFIG: Record<ModelType, { label: string; description: string; openAIModel: string; isPro: boolean }> = {
   'reple-quick': {
     label: 'Reple Quick',
-    description: 'Fastest & cheapest',
+    description: 'Fastest replies',
     openAIModel: 'gpt-5-nano',
     isPro: false
   },

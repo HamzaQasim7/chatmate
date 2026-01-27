@@ -3,7 +3,7 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   manifest: {
     name: 'Reple - AI Reply Assistant',
-    description: 'Smart AI-powered response suggestions like you',
+    description: 'Boost productivity with smart AI replies. Generate personalized responses instantly on WhatsApp, LinkedIn, and Slack.',
     version: '1.2.1',
     permissions: ['storage', 'activeTab', 'identity', 'webNavigation', 'tabs'],
     host_permissions: ['https://web.whatsapp.com/*', 'https://app.slack.com/*', 'https://www.linkedin.com/*', 'https://api.openai.com/*'],
@@ -12,7 +12,7 @@ export default defineConfig({
     },
     browser_specific_settings: {
       gecko: {
-        id: 'reple@chatmate.ai',
+        id: 'reple@repleai.site',
         strict_min_version: '109.0',
         // Explicitly state data collection policy to pass validation
         // We set 'none' as we don't passively collect user data (telemetry).

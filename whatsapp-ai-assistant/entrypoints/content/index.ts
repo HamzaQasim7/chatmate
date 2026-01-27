@@ -85,29 +85,55 @@ export function setSidebarUpdater(updater: (action: string, data: any) => void) 
 
 // Export for manual trigger
 export async function triggerSuggestions() {
-  debugLog('Manual trigger activated');
+  debugLog('=== triggerSuggestions() called ===');
+  debugLog('currentAdapter:', currentAdapter ? currentAdapter.platformId : 'NULL');
 
-  if (!currentAdapter) return;
-
-  const context = currentAdapter.extractContext();
-  if (!context) {
-    debugLog('No message context found');
+  if (!currentAdapter) {
+    debugLog('ERROR: No adapter - content script may not have initialized properly');
     if (updateSidebar) {
       updateSidebar('showSuggestions', {
         suggestions: [],
         message: '',
-        error: 'No messages found. Please open a chat.',
+        error: 'Extension not initialized. Please refresh the page.',
       });
     }
     return;
   }
 
-  debugLog('Context extracted:', context);
+  // Retry logic for intermittent detection issues
+  const maxRetries = 3;
+  const retryDelay = 500; // ms
 
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    debugLog(`Extraction attempt ${attempt}/${maxRetries}`);
+
+    const context = currentAdapter.extractContext();
+
+    if (context) {
+      debugLog('Context extracted successfully:', context);
+      if (updateSidebar) {
+        updateSidebar('messageDetected', {
+          context: context,
+          message: context.currentMessage
+        });
+      }
+      return; // Success - exit
+    }
+
+    // If not the last attempt, wait and retry
+    if (attempt < maxRetries) {
+      debugLog(`No context found, waiting ${retryDelay}ms before retry...`);
+      await new Promise(resolve => setTimeout(resolve, retryDelay));
+    }
+  }
+
+  // All retries failed
+  debugLog('All extraction attempts failed');
   if (updateSidebar) {
-    updateSidebar('messageDetected', {
-      context: context,
-      message: context.currentMessage
+    updateSidebar('showSuggestions', {
+      suggestions: [],
+      message: '',
+      error: 'No messages found. Please open a chat.',
     });
   }
 }

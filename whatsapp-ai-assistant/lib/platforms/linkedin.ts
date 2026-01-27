@@ -14,13 +14,15 @@ export class LinkedInAdapter implements PlatformAdapter {
     async waitForLoad(): Promise<void> {
         return new Promise((resolve) => {
             const checkInterval = setInterval(() => {
-                // Check for ANY messaging container (popup or full page)
                 const hasMessaging =
                     document.querySelector('.msg-overlay-conversation-bubble') ||
                     document.querySelector('.msg-s-message-list-content') ||
                     document.querySelector('.msg-convo-wrapper') ||
                     document.querySelector('[class*="msg-overlay"]') ||
-                    document.querySelector('[class*="messaging"]');
+                    document.querySelector('[class*="messaging"]') ||
+                    document.querySelector('.msg-overlay-list-bubble') ||
+                    document.querySelector('[class*="msg-thread"]') ||
+                    document.querySelector('[class*="conversation"]');
 
                 if (hasMessaging) {
                     clearInterval(checkInterval);
@@ -29,7 +31,6 @@ export class LinkedInAdapter implements PlatformAdapter {
                 }
             }, 500);
 
-            // Resolve after 5 seconds anyway to allow manual trigger
             setTimeout(() => {
                 clearInterval(checkInterval);
                 this.debugLog('Timeout - resolving anyway');
@@ -39,17 +40,16 @@ export class LinkedInAdapter implements PlatformAdapter {
     }
 
     private debugLog(message: string, data?: any) {
+        // eslint-disable-next-line no-console
         console.log(`[LinkedIn Adapter] ${message}`, data || '');
     }
 
     private getMyName(): string | null {
-        // Try profile photo alt text
         const profilePhoto = document.querySelector('.global-nav__me-photo') as HTMLImageElement;
         if (profilePhoto?.alt) {
             return profilePhoto.alt.split(' ')[0];
         }
 
-        // Try the nav menu
         const navButton = document.querySelector('.global-nav__primary-link-me-menu-trigger');
         if (navButton) {
             const img = navButton.querySelector('img');
@@ -59,172 +59,182 @@ export class LinkedInAdapter implements PlatformAdapter {
         return null;
     }
 
-    extractContext(): ChatContext | null {
-        try {
-            this.debugLog('Starting message extraction...');
+    // Try to find the active container with multiple selector strategies
+    private findActiveContainer(): Element | null {
+        // Strategy 1: Look for open conversation bubbles (popup chat)
+        const allBubbles = Array.from(document.querySelectorAll('.msg-overlay-conversation-bubble'));
+        for (const bubble of allBubbles) {
+            const style = window.getComputedStyle(bubble);
+            const isVisible = style.display !== 'none' && style.visibility !== 'hidden';
+            const notMinimized = !bubble.classList.contains('msg-overlay-conversation-bubble--is-minimized');
+            if (isVisible && notMinimized) {
+                this.debugLog('Found visible popup bubble');
+                return bubble;
+            }
+        }
 
-            // STEP 1: Find the active conversation container
-            // Try multiple selectors for the popup overlay
-            let activeContainer: Element | null = null;
+        // Strategy 2: Look for focused inbox list bubble
+        const focusedBubble = document.querySelector('.msg-overlay-list-bubble--is-active') ||
+            document.querySelector('.msg-overlay-list-bubble');
+        if (focusedBubble) {
+            const style = window.getComputedStyle(focusedBubble);
+            if (style.display !== 'none' && style.visibility !== 'hidden') {
+                this.debugLog('Found focused list bubble');
+                return focusedBubble;
+            }
+        }
 
-            // Popup overlay selectors (most common)
-            const popupSelectors = [
-                '.msg-overlay-conversation-bubble--is-active',
-                '.msg-overlay-conversation-bubble:not(.msg-overlay-conversation-bubble--is-minimized)',
-                '.msg-overlay-conversation-bubble',
-                '[class*="msg-overlay-conversation"]',
-            ];
+        // Strategy 3: Full page messaging
+        const fullPageSelectors = [
+            '.msg-s-message-list-content',
+            '.msg-convo-wrapper',
+            'main.scaffold-layout__main',
+            '[class*="scaffold-layout__main"]',
+            '.msg-thread',
+            '[class*="msg-thread"]',
+        ];
+        for (const sel of fullPageSelectors) {
+            const el = document.querySelector(sel);
+            if (el && (el as HTMLElement).offsetParent !== null) {
+                this.debugLog('Found full page container:', sel);
+                return el;
+            }
+        }
 
-            for (const sel of popupSelectors) {
+        // Strategy 4: Generic fallback - any visible messaging container
+        const genericSelectors = [
+            '[class*="messaging"][class*="container"]',
+            '[class*="conversation"][class*="container"]',
+            '[class*="msg-"][class*="content"]',
+            '[role="main"] [class*="message"]',
+        ];
+        for (const sel of genericSelectors) {
+            try {
                 const el = document.querySelector(sel);
-                if (el && el.querySelector('[class*="message"]')) {
-                    activeContainer = el;
-                    this.debugLog('Found popup container with:', sel);
-                    break;
+                if (el && (el as HTMLElement).offsetParent !== null) {
+                    this.debugLog('Found generic container:', sel);
+                    return el;
                 }
+            } catch (e) {
+                // Invalid selector, skip
             }
+        }
 
-            // Full page messaging selectors
-            if (!activeContainer) {
-                const fullPageSelectors = [
-                    '.msg-s-message-list-content',
-                    '.msg-convo-wrapper',
-                    '[class*="scaffold-layout__main"]',
-                ];
-                for (const sel of fullPageSelectors) {
-                    const el = document.querySelector(sel);
-                    if (el) {
-                        activeContainer = el;
-                        this.debugLog('Found full page container with:', sel);
-                        break;
-                    }
+        return null;
+    }
+
+    // Find messages within a container
+    private findMessages(container: Element): Element[] {
+        const messageSelectors = [
+            '.msg-s-message-list__event',
+            '.msg-s-event-listitem',
+            'li.msg-s-message-list__event',
+            '[data-message-id]',
+            '.msg-s-message-group__meta',
+            'li[class*="event-listitem"]',
+            '[class*="message-list"] li',
+            '[class*="msg-s-message"]',
+        ];
+
+        // First try to find a message list container inside
+        const listContainer = container.querySelector('.msg-s-message-list-content') ||
+            container.querySelector('[class*="message-list"]') ||
+            container;
+
+        for (const sel of messageSelectors) {
+            try {
+                const found = listContainer.querySelectorAll(sel);
+                if (found.length > 0) {
+                    this.debugLog(`Found ${found.length} messages with: ${sel}`);
+                    return Array.from(found);
                 }
+            } catch (e) {
+                // Invalid selector, skip
             }
+        }
+
+        return [];
+    }
+
+    // Extract text from a message element
+    private extractMessageText(messageEl: Element): string {
+        const textSelectors = [
+            '.msg-s-event-listitem__body',
+            '.msg-s-message-group__body',
+            '[class*="message-body"]',
+            '[class*="event-listitem__body"]',
+            'span[dir="ltr"]',
+            'p',
+        ];
+
+        for (const sel of textSelectors) {
+            const textEl = messageEl.querySelector(sel);
+            if (textEl) {
+                const text = (textEl as HTMLElement).innerText?.trim();
+                if (text) return text;
+            }
+        }
+
+        // Fallback: use innerText of the element itself
+        return (messageEl as HTMLElement).innerText?.trim() || '';
+    }
+
+    // Main extraction with retry logic
+    extractContext(): ChatContext | null {
+        return this.extractContextInternal();
+    }
+
+    private extractContextInternal(): ChatContext | null {
+        try {
+            this.debugLog('=== STARTING MESSAGE EXTRACTION ===');
+
+            // Find active container
+            const activeContainer = this.findActiveContainer();
 
             if (!activeContainer) {
-                this.debugLog('No active conversation container found');
+                this.debugLog('[FAIL] No active conversation container found');
                 return null;
             }
 
-            // STEP 2: Find message elements
-            // Try multiple selector patterns
-            const messageSelectors = [
-                '.msg-s-message-list__event',
-                '.msg-s-event-listitem',
-                '[class*="msg-s-message-list"] [class*="event"]',
-                '[class*="message-list"] li',
-                '[data-message-id]',
-            ];
+            this.debugLog('Active container found:', activeContainer.className);
 
-            let messages: Element[] = [];
-            for (const sel of messageSelectors) {
-                const found = activeContainer.querySelectorAll(sel);
-                if (found.length > 0) {
-                    messages = Array.from(found);
-                    this.debugLog(`Found ${messages.length} messages with:`, sel);
-                    break;
-                }
-            }
+            // Find messages
+            const messages = this.findMessages(activeContainer);
 
             if (messages.length === 0) {
-                this.debugLog('No messages found in container');
-                // Log what's in the container for debugging
-                this.debugLog('Container classes:', activeContainer.className);
-                this.debugLog('Container HTML preview:', activeContainer.innerHTML.substring(0, 500));
+                this.debugLog('[FAIL] No messages found in container');
+                // Log innerHTML for debugging
+                const preview = activeContainer.innerHTML.substring(0, 500);
+                this.debugLog('Container preview:', preview);
                 return null;
             }
 
-            // STEP 3: Get the last message
+            // Get the last message
             const lastMessage = messages[messages.length - 1];
+            this.debugLog('Last message element:', lastMessage.className);
 
-            // STEP 4: Extract message text
-            const textSelectors = [
-                '.msg-s-event-listitem__body',
-                '[class*="message-body"]',
-                '[class*="event-listitem__body"]',
-                'p',
-                'span[dir="ltr"]',
-            ];
-
-            let messageText = '';
-            for (const sel of textSelectors) {
-                const textEl = lastMessage.querySelector(sel);
-                if (textEl) {
-                    messageText = (textEl as HTMLElement).innerText?.trim() || '';
-                    if (messageText) {
-                        this.debugLog('Found text with:', sel);
-                        break;
-                    }
-                }
-            }
-
-            if (!messageText) {
-                // Fallback: get all text content
-                messageText = (lastMessage as HTMLElement).innerText?.trim() || '';
-            }
-
-            // Clean up message text
+            // Extract message text
+            let messageText = this.extractMessageText(lastMessage);
             messageText = messageText.replace(/\n\s*\n/g, '\n').trim();
 
             if (!messageText) {
-                this.debugLog('No message text found');
+                this.debugLog('[FAIL] No message text found');
                 return null;
             }
 
-            // STEP 5: Extract sender name
-            let senderName = 'Contact';
+            this.debugLog('Message text:', messageText.substring(0, 50));
 
-            // Try to get sender from message group
-            const messageGroup = lastMessage.closest('[class*="message-group"]');
-            if (messageGroup) {
-                const nameSelectors = [
-                    '[class*="message-group__name"] a',
-                    '[class*="profile-link"]',
-                    '[class*="actor-name"]',
-                    'a[href*="/in/"]',
-                ];
-                for (const sel of nameSelectors) {
-                    const nameEl = messageGroup.querySelector(sel);
-                    if (nameEl) {
-                        senderName = (nameEl as HTMLElement).innerText?.split('•')[0]?.trim() || 'Contact';
-                        if (senderName && senderName !== 'Contact') break;
-                    }
-                }
-            }
+            // Extract sender name
+            let senderName = this.extractSenderName(lastMessage, activeContainer);
+            this.debugLog('Sender:', senderName);
 
-            // Fallback: Get the conversation header name
-            if (senderName === 'Contact') {
-                const headerSelectors = [
-                    '.msg-overlay-bubble-header__title a',
-                    '.msg-overlay-bubble-header__title',
-                    '[class*="conversation-title"]',
-                    '.msg-thread__link-to-profile',
-                ];
-                for (const sel of headerSelectors) {
-                    const headerEl = document.querySelector(sel);
-                    if (headerEl) {
-                        senderName = (headerEl as HTMLElement).innerText?.trim() || 'Contact';
-                        if (senderName && senderName !== 'Contact') {
-                            this.debugLog('Got sender from header:', senderName);
-                            break;
-                        }
-                    }
-                }
-            }
-
-            this.debugLog('Extracted:', { sender: senderName, message: messageText.substring(0, 50) });
-
-            // STEP 6: Get previous messages for context
+            // Get previous messages for context
             const previousMessages = messages
-                .slice(-6, -1)
-                .map(msg => {
-                    for (const sel of textSelectors) {
-                        const el = msg.querySelector(sel);
-                        if (el) return (el as HTMLElement).innerText?.trim() || '';
-                    }
-                    return '';
-                })
-                .filter(Boolean);
+                .slice(Math.max(0, messages.length - 6), -1)
+                .map(msg => this.extractMessageText(msg))
+                .filter(text => text.length > 0);
+
+            this.debugLog('=== EXTRACTION COMPLETE ===');
 
             return {
                 senderName,
@@ -238,8 +248,59 @@ export class LinkedInAdapter implements PlatformAdapter {
         }
     }
 
+    private extractSenderName(messageEl: Element, _container: Element): string {
+        let senderName = 'Contact';
+
+        // Try to get sender from message group
+        const messageGroup = messageEl.closest('.msg-s-message-list__group') ||
+            messageEl.closest('[class*="message-group"]');
+
+        if (messageGroup) {
+            const nameSelectors = [
+                '.msg-s-message-group__profile-link',
+                '.msg-s-message-group__name',
+                '[class*="actor-name"]',
+                'a[href*="/in/"]',
+                'img[alt]',
+            ];
+
+            for (const sel of nameSelectors) {
+                const nameEl = messageGroup.querySelector(sel);
+                if (nameEl) {
+                    if (nameEl.tagName === 'IMG') {
+                        senderName = (nameEl as HTMLImageElement).alt?.trim() || 'Contact';
+                    } else {
+                        senderName = (nameEl as HTMLElement).innerText?.split('•')[0]?.trim() || 'Contact';
+                    }
+                    if (senderName && senderName !== 'Contact') break;
+                }
+            }
+        }
+
+        // Fallback: Conversation header
+        if (senderName === 'Contact') {
+            const headerSelectors = [
+                '.msg-overlay-bubble-header__title',
+                '.msg-entity-lockup__entity-title',
+                '[class*="conversation-title"]',
+                '.msg-thread__link-to-profile',
+            ];
+
+            for (const sel of headerSelectors) {
+                const headerEl = document.querySelector(sel);
+                if (headerEl) {
+                    const link = headerEl.querySelector('a');
+                    senderName = (link || headerEl as HTMLElement).innerText?.trim() || 'Contact';
+                    senderName = senderName.split('\n')[0].trim();
+                    if (senderName && senderName !== 'Contact') break;
+                }
+            }
+        }
+
+        return senderName;
+    }
+
     insertText(text: string): void {
-        // Find the editor with multiple selectors
         const editorSelectors = [
             '.msg-overlay-conversation-bubble .msg-form__contenteditable',
             '.msg-form__contenteditable',
@@ -260,11 +321,9 @@ export class LinkedInAdapter implements PlatformAdapter {
 
         editor.focus();
 
-        // Try execCommand first
         const success = document.execCommand('insertText', false, text);
 
         if (!success) {
-            // Fallback: direct DOM manipulation
             const placeholder = editor.querySelector('.msg-form__placeholder');
             if (placeholder) placeholder.remove();
 
@@ -282,7 +341,6 @@ export class LinkedInAdapter implements PlatformAdapter {
     observeMessages(onMessage: (context: ChatContext) => void): void {
         this.disconnect();
 
-        // Watch the entire body to catch popup messages
         const container = document.body;
 
         this.observer = new MutationObserver((mutations) => {
@@ -291,9 +349,9 @@ export class LinkedInAdapter implements PlatformAdapter {
             mutations.forEach(m => {
                 m.addedNodes.forEach(node => {
                     if (node instanceof HTMLElement) {
-                        // Check for any message-related elements
                         if (node.className?.includes?.('msg-s-event') ||
                             node.className?.includes?.('message-list') ||
+                            node.className?.includes?.('msg-s-message') ||
                             node.querySelector?.('[class*="msg-s-event"]') ||
                             node.querySelector?.('[class*="message-body"]')) {
                             hasNewMessage = true;
@@ -310,7 +368,6 @@ export class LinkedInAdapter implements PlatformAdapter {
                         const myName = this.getMyName();
                         const sender = context.senderName;
 
-                        // Check if message is from self
                         const isMe =
                             (myName && sender.toLowerCase().includes(myName.toLowerCase())) ||
                             sender.toLowerCase() === 'you';
