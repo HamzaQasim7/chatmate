@@ -5,7 +5,7 @@ export default defineConfig({
     name: 'Reple - AI Reply Assistant',
     description: 'Boost productivity with smart AI replies. Generate personalized responses instantly on WhatsApp, LinkedIn, and Slack.',
     version: '1.2.1',
-    permissions: ['storage', 'activeTab', 'identity', 'webNavigation', 'tabs'],
+    permissions: ['storage', 'identity'],
     host_permissions: ['https://web.whatsapp.com/*', 'https://app.slack.com/*', 'https://www.linkedin.com/*', 'https://api.openai.com/*'],
     icons: {
       128: 'reple-favicon.png',

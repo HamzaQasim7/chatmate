@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 
 import { getSettings, saveSettings, getUsageStats } from '@/lib/storage';
-import type { Suggestion, ToneType, Settings, UsageStats } from '@/lib/types';
+import type { Suggestion, ToneType, Settings, UsageStats, AudioAnalysisResult } from '@/lib/types';
 import { TONE_CONFIG } from '@/lib/types';
 
 let sidebarUpdateFn: ((action: string, data: any) => void) | null = null;
@@ -47,7 +47,7 @@ const ToneIcons: Record<ToneType, React.ReactNode> = {
 const toneColors: Record<ToneType, { bg: string; border: string; text: string }> = {
   formal: { bg: 'rgba(142, 142, 147, 0.15)', border: 'rgba(142, 142, 147, 0.3)', text: '#8E8E93' },
   friendly: { bg: 'rgba(255, 204, 0, 0.15)', border: 'rgba(255, 204, 0, 0.3)', text: '#B8860B' },
-  professional: { bg: 'rgba(0, 245, 146, 0.15)', border: 'rgba(0, 245, 146, 0.25)', text: '#00f592' },
+  professional: { bg: 'rgba(0, 245, 146, 0.15)', border: 'rgba(0, 245, 146, 0.25)', text: '#13ec5b' },
   natural: { bg: 'rgba(52, 199, 89, 0.15)', border: 'rgba(52, 199, 89, 0.25)', text: '#34C759' },
   sales: { bg: 'rgba(255, 149, 0, 0.15)', border: 'rgba(255, 149, 0, 0.25)', text: '#FF9500' },
   negotiator: { bg: 'rgba(175, 82, 222, 0.15)', border: 'rgba(175, 82, 222, 0.25)', text: '#AF52DE' },
@@ -139,6 +139,7 @@ function FloatingPopup() {
   const [customInput, setCustomInput] = useState('');
   const [usage, setUsage] = useState<UsageStats | null>(null);
   const [hasCustomKey, setHasCustomKey] = useState(false);
+  const [audioResult, setAudioResult] = useState<AudioAnalysisResult | null>(null);
 
   // Drag state
   const [position, setPosition] = useState({ x: 0, y: 80 });
@@ -250,12 +251,21 @@ function FloatingPopup() {
         setCurrentContext(ctx);
         setLastMessage(data.message || '');
         setSuggestion(null); // Clear previous suggestion
+        setAudioResult(null); // Clear previous audio
         setLoading(false);
         setScanning(false);
         setError(null);
 
         // Notify user of new message detection
         if (!expanded) setHasNew(true);
+      } else if (action === 'showAudioAnalysis') {
+        const result = data.result;
+        setAudioResult(result);
+        setSuggestion(null);
+        setExpanded(true);
+        setHasNew(true);
+        setLoading(false);
+        setScanning(false);
       } else if (action === 'loading') {
         setLoading(true);
         setExpanded(true);
@@ -691,15 +701,81 @@ function FloatingPopup() {
               alignItems: 'center',
               gap: '14px',
             }}>
-              <Loader2 size={28} style={{ color: '#00f592', animation: 'spin 1s linear infinite' }} />
+              <Loader2 size={28} style={{ color: '#13ec5b', animation: 'spin 1s linear infinite' }} />
               <span style={{ fontSize: '13px', color: theme.loadingTextColor, fontWeight: 500 }}>
                 Generating {toneConfig.label} response...
               </span>
             </div>
           )}
 
-          {/* Response */}
-          {!loading && suggestion && (
+          {/* Audio Analysis Result (Rainmaker) */}
+          {!loading && audioResult && (
+            <div className="wa-card" style={{ borderColor: 'rgba(124, 58, 237, 0.4)' }}>
+              {/* Header */}
+              <div className="wa-card-header" style={{ background: 'linear-gradient(135deg, #7C3AED 0%, #5B21B6 100%)', padding: '12px 16px' }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <Zap size={18} color="white" fill="white" />
+                  <span style={{ color: 'white', fontWeight: 600, fontSize: '14px' }}>Rainmaker Audio Analysis</span>
+                </div>
+              </div>
+
+              <div className="wa-card-body" style={{ padding: '16px' }}>
+
+                {/* Signals */}
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '6px', textTransform: 'uppercase', fontWeight: 600 }}>Detected Signals</div>
+                  <ul className="mb-3 space-y-1">
+                    {(audioResult.signals || []).map((signal, idx) => (
+                      <li key={idx} className="text-xs text-gray-700 flex items-start">
+                        <span className="mr-1.5 mt-0.5 text-green-500">✓</span>
+                        {signal}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Transcript Accordion */}
+                <details style={{ marginBottom: '16px', fontSize: '12px', color: 'rgba(255,255,255,0.6)', cursor: 'pointer' }}>
+                  <summary style={{ outline: 'none' }}>Show Transcript</summary>
+                  <p style={{ marginTop: '8px', padding: '10px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', fontStyle: 'italic', lineHeight: 1.5 }}>
+                    "{audioResult.transcript}"
+                  </p>
+                </details>
+
+                {/* Strategy */}
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: 600 }}>Rainmaker Strategy</div>
+                  <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.9)', lineHeight: 1.5 }}>{audioResult.strategy}</p>
+                </div>
+
+                {/* Suggested Reply */}
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: 600 }}>Suggested Reply</div>
+                <div className="wa-card-text" style={{ borderLeftColor: '#7C3AED', background: 'rgba(124, 58, 237, 0.1)' }}>
+                  {audioResult.suggestedReply}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="wa-card-actions">
+                <button className="wa-action-btn wa-action-copy" onClick={() => { navigator.clipboard.writeText(audioResult.suggestedReply); setCopied(true); setTimeout(() => setCopied(false), 2000); }}>
+                  {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy'}
+                </button>
+                <button className="wa-action-btn wa-action-insert" style={{ background: '#7C3AED', color: 'white' }} onClick={() => {
+                  const adapter = PlatformFactory.getAdapter();
+                  if (adapter) {
+                    adapter.insertText(audioResult.suggestedReply);
+                    // We simulate a "sent" feedback
+                    setExpanded(false);
+                  }
+                }}>
+                  <SendHorizontal size={14} /> Insert
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Response (Standard) */}
+          {!loading && !audioResult && suggestion && (
             <div style={{
               background: theme.responseCardBg,
               borderRadius: '16px',
@@ -803,7 +879,7 @@ function FloatingPopup() {
                     padding: '10px 18px',
                     borderRadius: '10px',
                     border: 'none',
-                    background: '#00f592',
+                    background: '#13ec5b',
                     color: 'white',
                     fontSize: '12px',
                     fontWeight: 600,
@@ -830,7 +906,7 @@ function FloatingPopup() {
                     padding: '14px',
                     borderRadius: '12px',
                     border: 'none',
-                    background: 'linear-gradient(135deg, #00f592 0%, #00d68f 100%)',
+                    background: 'linear-gradient(135deg, #13ec5b 0%, #00d68f 100%)',
                     color: 'white',
                     fontSize: '15px',
                     fontWeight: 700,
@@ -972,7 +1048,7 @@ function FloatingPopup() {
                   padding: '8px',
                   borderRadius: '8px',
                   border: 'none',
-                  background: customInput.trim() ? '#00f592' : 'transparent',
+                  background: customInput.trim() ? '#13ec5b' : 'transparent',
                   color: customInput.trim() ? 'white' : theme.closeBtnColor,
                   cursor: customInput.trim() ? 'pointer' : 'default',
                   display: 'flex',

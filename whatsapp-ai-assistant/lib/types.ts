@@ -65,6 +65,40 @@ export interface APIResponse {
   limit?: number;
 }
 
+// Enhanced BuyingSignal type with categories and confidence
+export interface BuyingSignal {
+  type: 'positive' | 'negative' | 'neutral' | 'objection';
+  confidence: number; // 0-1
+  signal: string;
+  category: 'price' | 'timing' | 'authority' | 'need' | 'competition' | 'general';
+  quote: string; // Exact quote from transcript
+}
+
+// Enhanced AudioAnalysisResult with rich analysis data
+export interface AudioAnalysisResult {
+  transcript: string;
+  language?: string;
+  duration?: number;
+  sentiment: {
+    overall: 'positive' | 'negative' | 'neutral';
+    score: number; // -1 to 1
+  };
+  buyingSignals: BuyingSignal[];
+  urgency: 'high' | 'medium' | 'low';
+  suggestedTone: string;
+  keyPoints: string[];
+  strategy: string;
+  suggestedReply: string;
+  // Legacy fields for backward compatibility
+  tone?: string;
+  buyingSignal?: {
+    signal: string;
+    score: number;
+    urgency: string;
+  };
+  signals?: string[];
+}
+
 // Tone configuration with icons and labels
 export const TONE_CONFIG: Record<ToneType, { icon: string; label: string; description: string }> = {
   formal: {

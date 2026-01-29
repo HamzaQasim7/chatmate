@@ -61,31 +61,49 @@ export class LinkedInAdapter implements PlatformAdapter {
 
     // Try to find the active container with multiple selector strategies
     private findActiveContainer(): Element | null {
-        // Strategy 1: Look for open conversation bubbles (popup chat)
-        const allBubbles = Array.from(document.querySelectorAll('.msg-overlay-conversation-bubble'));
-        for (const bubble of allBubbles) {
-            const style = window.getComputedStyle(bubble);
+        // Helper to check if element is visible and not minimized
+        const isValidContainer = (el: Element): boolean => {
+            const style = window.getComputedStyle(el);
             const isVisible = style.display !== 'none' && style.visibility !== 'hidden';
-            const notMinimized = !bubble.classList.contains('msg-overlay-conversation-bubble--is-minimized');
-            if (isVisible && notMinimized) {
-                this.debugLog('Found visible popup bubble');
-                return bubble;
-            }
+            // Check for minimized classes or state
+            const isMinimized = el.classList.contains('msg-overlay-conversation-bubble--is-minimized') ||
+                el.classList.contains('msg-overlay-list-bubble--is-minimized') ||
+                el.classList.value.includes('minimized') ||
+                el.getAttribute('aria-hidden') === 'true';
+
+            return isVisible && !isMinimized;
+        };
+
+        // Strategy 1: Look for open conversation bubbles (popup chat) - HIGHEST PRIORITY
+        // These are the individual chat windows that pop up
+        const allBubbles = Array.from(document.querySelectorAll('.msg-overlay-conversation-bubble'));
+
+        // Find the one that is NOT hidden/minimized
+        const activeBubble = allBubbles.find(isValidContainer);
+        if (activeBubble) {
+            this.debugLog('Found visible popup bubble');
+            return activeBubble;
         }
 
-        // Strategy 2: Look for focused inbox list bubble
+        // Strategy 2: Look for focused inbox list bubble (The "Messaging" tab at bottom right)
+        // Only use this if it's expanded and actually showing a conversation
         const focusedBubble = document.querySelector('.msg-overlay-list-bubble--is-active') ||
             document.querySelector('.msg-overlay-list-bubble');
-        if (focusedBubble) {
-            const style = window.getComputedStyle(focusedBubble);
-            if (style.display !== 'none' && style.visibility !== 'hidden') {
-                this.debugLog('Found focused list bubble');
+
+        if (focusedBubble && isValidContainer(focusedBubble)) {
+            // Check if this container actually HAS a message list inside it
+            // (Sometimes it just shows the list of contacts, not a chat)
+            if (focusedBubble.querySelector('.msg-s-message-list-content') ||
+                focusedBubble.querySelector('[class*="message-list"]')) {
+                this.debugLog('Found focused list bubble with message content');
                 return focusedBubble;
             }
         }
 
-        // Strategy 3: Full page messaging
+        // Strategy 3: Full page messaging (e.g. /messaging/thread/...)
         const fullPageSelectors = [
+            'ul.msg-s-event-list',
+            'div.msg-s-message-list-container',
             '.msg-s-message-list-content',
             '.msg-convo-wrapper',
             'main.scaffold-layout__main',
@@ -93,30 +111,39 @@ export class LinkedInAdapter implements PlatformAdapter {
             '.msg-thread',
             '[class*="msg-thread"]',
         ];
+
         for (const sel of fullPageSelectors) {
             const el = document.querySelector(sel);
-            if (el && (el as HTMLElement).offsetParent !== null) {
-                this.debugLog('Found full page container:', sel);
-                return el;
+            if (el && isValidContainer(el)) {
+                // Verify this container actually has messages inside
+                const hasMessages = el.querySelector('li.msg-s-event-listitem') ||
+                    el.querySelector('li[class*="msg-s-event"]') ||
+                    el.querySelector('[class*="message-list"]');
+
+                if (hasMessages) {
+                    this.debugLog('Found full page container with messages:', sel);
+                    return el;
+                }
             }
         }
 
-        // Strategy 4: Generic fallback - any visible messaging container
+        // Strategy 4: Generic fallback
         const genericSelectors = [
             '[class*="messaging"][class*="container"]',
             '[class*="conversation"][class*="container"]',
             '[class*="msg-"][class*="content"]',
             '[role="main"] [class*="message"]',
         ];
+
         for (const sel of genericSelectors) {
             try {
                 const el = document.querySelector(sel);
-                if (el && (el as HTMLElement).offsetParent !== null) {
+                if (el && isValidContainer(el)) {
                     this.debugLog('Found generic container:', sel);
                     return el;
                 }
             } catch (e) {
-                // Invalid selector, skip
+                // Invalid selector
             }
         }
 
@@ -126,6 +153,8 @@ export class LinkedInAdapter implements PlatformAdapter {
     // Find messages within a container
     private findMessages(container: Element): Element[] {
         const messageSelectors = [
+            'li.msg-s-event-listitem',
+            'li[class*="msg-s-event-listitem"]',
             '.msg-s-message-list__event',
             '.msg-s-event-listitem',
             'li.msg-s-message-list__event',
@@ -181,7 +210,30 @@ export class LinkedInAdapter implements PlatformAdapter {
 
     // Main extraction with retry logic
     extractContext(): ChatContext | null {
-        return this.extractContextInternal();
+        // Try up to 3 times with 500ms delay between attempts
+        // This handles LinkedIn's React hydration delay
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            this.debugLog(`Extraction attempt ${attempt}/3`);
+            const result = this.extractContextInternal();
+
+            if (result) {
+                this.debugLog('✓ Extraction successful');
+                return result;
+            }
+
+            // Don't wait after the last attempt
+            if (attempt < 3) {
+                this.debugLog('Waiting 500ms before retry...');
+                // Use synchronous blocking to avoid async complexity
+                const startTime = Date.now();
+                while (Date.now() - startTime < 500) {
+                    // Busy wait (not ideal but works for content scripts)
+                }
+            }
+        }
+
+        this.debugLog('✗ All extraction attempts failed');
+        return null;
     }
 
     private extractContextInternal(): ChatContext | null {
@@ -203,9 +255,16 @@ export class LinkedInAdapter implements PlatformAdapter {
 
             if (messages.length === 0) {
                 this.debugLog('[FAIL] No messages found in container');
-                // Log innerHTML for debugging
-                const preview = activeContainer.innerHTML.substring(0, 500);
+                this.debugLog('Container classes:', activeContainer.className);
+                // Log innerHTML preview for debugging
+                const preview = activeContainer.innerHTML.substring(0, 300);
                 this.debugLog('Container preview:', preview);
+                // Log all potential message elements for debugging
+                const allLis = activeContainer.querySelectorAll('li');
+                this.debugLog('Found total <li> elements:', allLis.length);
+                if (allLis.length > 0) {
+                    this.debugLog('First <li> classes:', allLis[0].className);
+                }
                 return null;
             }
 
@@ -228,7 +287,6 @@ export class LinkedInAdapter implements PlatformAdapter {
             let senderName = this.extractSenderName(lastMessage, activeContainer);
             this.debugLog('Sender:', senderName);
 
-            // Get previous messages for context
             const previousMessages = messages
                 .slice(Math.max(0, messages.length - 6), -1)
                 .map(msg => this.extractMessageText(msg))

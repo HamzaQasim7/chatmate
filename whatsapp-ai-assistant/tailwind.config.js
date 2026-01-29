@@ -8,7 +8,7 @@ export default {
     extend: {
       colors: {
         whatsapp: {
-          green: '#25D366',
+          green: '#13ec5b',
           dark: '#075E54',
           light: '#DCF8C6',
         },

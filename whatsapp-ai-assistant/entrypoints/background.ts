@@ -64,6 +64,34 @@ export default defineBackground({
         return true;
       }
 
+      // ========== AUDIO ANALYSIS (RAINMAKER) ==========
+      if (message.action === 'analyzeAudio') {
+        (async () => {
+          try {
+            console.log('[Background] Analyzing audio via server...');
+
+            // Dynamic import to avoid loading heavy modules if not needed
+            const { analyzeAudioServer } = await import('@/lib/api/audio_server');
+
+            // Get settings for optional user API key
+            const settings = await getSettings();
+
+            // Server-side API (uses server key if user key not provided)
+            const result = await analyzeAudioServer({
+              audioBase64: message.data.audioBase64,
+              apiKey: settings.apiKey // Optional: will use server key if not provided
+            });
+
+            console.log('[Background] Analysis complete');
+            sendResponse({ success: true, result });
+          } catch (err: any) {
+            console.error('[Background] Audio analysis failed:', err);
+            sendResponse({ success: false, error: err.message || 'Analysis failed' });
+          }
+        })();
+        return true; // Keep channel open
+      }
+
       return false;
     });
   },

@@ -1,5 +1,5 @@
 /* WhatsApp AI Assistant - Premium Sidebar Styles */
-/* Primary Color: #25D366 (WhatsApp Green) */
+/* Primary Color: #13ec5b (WhatsApp Green) */
 
 /* Reset */
 .wa-panel *,
@@ -18,7 +18,7 @@
   bottom: 24px;
   width: 56px;
   height: 56px;
-  background: linear-gradient(135deg, #00f592 0%, #00d68f 100%);
+  background: linear-gradient(135deg, #13ec5b 0%, #13ec5b 100%);
   color: white;
   border: none;
   border-radius: 50%;
@@ -26,14 +26,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 20px rgba(0, 245, 146, 0.4), 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 20px rgba(19, 236, 91, 0.4), 0 2px 8px rgba(0, 0, 0, 0.15);
   z-index: 9999;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .wa-fab:hover {
   transform: scale(1.1) rotate(10deg);
-  box-shadow: 0 8px 30px rgba(0, 245, 146, 0.5), 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 30px rgba(19, 236, 91, 0.5), 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 /* ========================================
@@ -70,7 +70,7 @@
    HEADER
    ======================================== */
 .wa-panel-header {
-  background: linear-gradient(135deg, #00f592 0%, #00d68f 100%);
+  background: linear-gradient(135deg, #13ec5b 0%, #13ec5b 100%);
   padding: 20px;
   display: flex;
   align-items: center;
@@ -163,7 +163,7 @@
 .wa-scan-button {
   width: 100%;
   padding: 16px 24px;
-  background: linear-gradient(135deg, #00f592 0%, #00d68f 100%);
+  background: linear-gradient(135deg, #13ec5b 0%, #13ec5b 100%);
   color: white;
   border: none;
   border-radius: 14px;
@@ -175,12 +175,12 @@
   justify-content: center;
   gap: 10px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 16px rgba(0, 245, 146, 0.3);
+  box-shadow: 0 4px 16px rgba(19, 236, 91, 0.3);
 }
 
 .wa-scan-button:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 245, 146, 0.4);
+  box-shadow: 0 8px 24px rgba(19, 236, 91, 0.4);
 }
 
 .wa-scan-button:disabled {
@@ -225,7 +225,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #00f592;
+  color: #13ec5b;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -369,7 +369,7 @@
   background: rgba(0, 0, 0, 0.2);
   padding: 14px;
   border-radius: 10px;
-  border-left: 3px solid #00f592;
+  border-left: 3px solid #13ec5b;
 }
 
 /* Card Actions */
@@ -405,16 +405,16 @@
 }
 
 .wa-action-insert {
-  background: linear-gradient(135deg, #00f592 0%, #00d68f 100%);
+  background: linear-gradient(135deg, #13ec5b 0%, #13ec5b 100%);
   color: white;
 }
 
 .wa-action-insert:hover {
-  box-shadow: 0 4px 12px rgba(0, 245, 146, 0.4);
+  box-shadow: 0 4px 12px rgba(19, 236, 91, 0.4);
 }
 
 .wa-action-success {
-  background: #00f592 !important;
+  background: #13ec5b !important;
   color: white !important;
   border-color: transparent !important;
 }
@@ -433,12 +433,12 @@
 .wa-empty-icon {
   width: 80px;
   height: 80px;
-  background: linear-gradient(135deg, rgba(0, 245, 146, 0.15) 0%, rgba(0, 214, 143, 0.15) 100%);
+  background: linear-gradient(135deg, rgba(19, 236, 91, 0.15) 0%, rgba(19, 236, 91, 0.15) 100%);
   border-radius: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #00f592;
+  color: #13ec5b;
   margin-bottom: 20px;
 }
 
@@ -511,4 +511,33 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+/* ==============================================
+       RAINMAKER AUDIO BUTTON
+   ============================================== */
+.rainmaker-analyze-btn {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  /* transform: translateY(-50%); */
+  background: linear-gradient(135deg, #FF6B6B 0%, #EE5253 100%);
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rainmaker-analyze-btn:hover {
+  transform: translateY(-50%) scale(1.05);
+  box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4);
 }

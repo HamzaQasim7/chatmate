@@ -76,7 +76,8 @@ export async function logout(): Promise<void> {
  */
 export function initAuthListeners(): void {
     // Listen for OAuth redirects and capture session
-    setupOAuthRedirectListener();
+    // Listen for OAuth redirects and capture session
+    // setupOAuthRedirectListener(); // Removed V3 violation
 
     // Listen for auth state changes from Supabase
     supabase.auth.onAuthStateChange(async (event, session) => {
@@ -152,32 +153,7 @@ async function loginFirefox(url: string): Promise<void> {
  * Sets up listener to capture OAuth redirect and extract session.
  * Not strictly needed if launchWebAuthFlow is used, but kept as backup for some edge cases.
  */
-function setupOAuthRedirectListener(): void {
-    // With launchWebAuthFlow, we theoretically don't need this, 
-    // but some older Chromiums might still use tab redirects.
-    if (getBrowser() !== 'chromium') return;
-
-    // Only set up for Chromium (Firefox uses identity API which returns URL directly)
-    if (getBrowser() !== 'chromium') return;
-
-    console.log('[Auth] Setting up webNavigation listener');
-
-    chrome.webNavigation.onCompleted.addListener(async (details) => {
-        const { url } = details;
-        console.log('[Auth] webNavigation.onCompleted:', url.substring(0, 80));
-
-        // Check if this is a Supabase OAuth callback
-        if (url.includes('access_token') || url.includes('supabase.co/auth/v1/callback')) {
-            console.log('[Auth] OAuth redirect detected:', url.substring(0, 50));
-            await handleOAuthRedirect(url);
-
-            // Close the OAuth tab
-            if (details.tabId) {
-                chrome.tabs.remove(details.tabId);
-            }
-        }
-    });
-}
+// function setupOAuthRedirectListener() ... REMOVED for V3 Compliance
 
 /**
  * Extracts tokens from OAuth redirect URL and sets Supabase session.

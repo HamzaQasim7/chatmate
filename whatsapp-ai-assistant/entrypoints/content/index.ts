@@ -61,6 +61,18 @@ export default defineContentScript({
       }
     });
 
+    // Initialize Audio Injector if WhatsApp
+    if (currentAdapter.platformId === 'whatsapp') {
+      const { WhatsAppAudioInjector } = await import('@/lib/platforms/whatsapp_audio');
+      const audioInjector = new WhatsAppAudioInjector();
+      audioInjector.init((result) => {
+        if (updateSidebar) {
+          updateSidebar('showAudioAnalysis', { result });
+        }
+      });
+      debugLog('Audio injector initialized');
+    }
+
     // Set up keyboard shortcut
     setupKeyboardShortcut();
 

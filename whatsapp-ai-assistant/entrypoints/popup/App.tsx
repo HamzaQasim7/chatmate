@@ -53,7 +53,7 @@ export default function App() {
   if (loading || !settings) {
     return (
       <div className="w-full h-96 flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#00f592' }}></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: '#13ec5b' }}></div>
       </div>
     );
   }

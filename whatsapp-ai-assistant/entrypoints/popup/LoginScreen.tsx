@@ -142,7 +142,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             required
-                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#00f592] focus:border-transparent text-sm"
+                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#13ec5b] focus:border-transparent text-sm"
                         />
                     </div>
                     <div>
@@ -152,14 +152,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             required
-                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#00f592] focus:border-transparent text-sm"
+                            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#13ec5b] focus:border-transparent text-sm"
                         />
                     </div>
 
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full bg-[#00f592] hover:bg-[#00d680] text-slate-900 font-bold py-2.5 px-4 rounded-lg transition-all shadow-sm flex items-center justify-center text-sm"
+                        className="w-full bg-[#13ec5b] hover:bg-[#13ec5b] text-slate-900 font-bold py-2.5 px-4 rounded-lg transition-all shadow-sm flex items-center justify-center text-sm"
                     >
                         {loading && <Loader2 className="animate-spin mr-2" size={16} />}
                         {view === 'signin' ? 'Sign In' : 'Sign Up'}
@@ -170,7 +170,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                     {view === 'signin' ? "Don't have an account? " : "Already have an account? "}
                     <button
                         onClick={() => setView(view === 'signin' ? 'signup' : 'signin')}
-                        className="text-[#00d680] font-semibold hover:underline"
+                        className="text-[#13ec5b] font-semibold hover:underline"
                     >
                         {view === 'signin' ? 'Sign up' : 'Sign in'}
                     </button>
