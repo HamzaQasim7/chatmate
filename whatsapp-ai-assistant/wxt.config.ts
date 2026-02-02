@@ -4,11 +4,18 @@ export default defineConfig({
   manifest: {
     name: 'Reple - AI Reply Assistant',
     description: 'Boost productivity with smart AI replies. Generate personalized responses instantly on WhatsApp, LinkedIn, and Slack.',
-    version: '1.2.1',
+    version: '1.3.0',
     permissions: ['storage', 'identity'],
     host_permissions: ['https://web.whatsapp.com/*', 'https://app.slack.com/*', 'https://www.linkedin.com/*', 'https://api.openai.com/*'],
+    externally_connectable: {
+      matches: [
+        'https://repleai.site/*',
+        'https://www.repleai.site/*'
+      ]
+    },
     icons: {
-      128: 'reple-favicon.png',
+      48: 'reple-favicon-48.png',
+      128: 'reple-favicon.png', // Keep high-res fallback if available, or just use the new one if preferred.
     },
     browser_specific_settings: {
       gecko: {
@@ -27,6 +34,7 @@ export default defineConfig({
       default_popup: 'popup.html',
       default_title: 'Reple',
       default_icon: {
+        48: 'reple-favicon-48.png',
         128: 'reple-favicon.png',
       },
     },

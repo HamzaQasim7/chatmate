@@ -9,6 +9,7 @@ declare module "wxt/browser" {
     | "/content-scripts/content.js"
     | "/manifest.json"
     | "/popup.html"
+    | "/reple-favicon-48.png"
     | "/reple-favicon.png"
   type HtmlPublicPath = Extract<PublicPath, `${string}.html`>
   export interface WxtRuntime {

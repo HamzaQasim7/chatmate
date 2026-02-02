@@ -1,4 +1,5 @@
 import { defineBackground } from 'wxt/utils/define-background';
+
 import { getSettings, getUsageStats } from '@/lib/storage';
 import { TONE_CONFIG, MODEL_CONFIG, type ChatContext, type Suggestion, type ToneType } from '@/lib/types';
 import { generateReply } from '@/lib/api';
@@ -12,6 +13,74 @@ export default defineBackground({
     console.log('[WhatsApp AI Background] Script loaded');
 
     // Initialize auth listeners (OAuth redirect capture)
+    // ========== POST-INSTALL REDIRECT ==========
+    browser.runtime.onInstalled.addListener(async (details) => {
+      if (details.reason === 'install') {
+        console.log('[Background] First install - opening welcome page');
+
+        const extensionId = browser.runtime.id;
+        const welcomeUrl = `https://repleai.site/extension/welcome?extensionId=${extensionId}`;
+
+        await browser.tabs.create({ url: welcomeUrl });
+      }
+    });
+
+    // ========== LISTEN FOR AUTH FROM WEBSITE ==========
+    browser.runtime.onMessageExternal.addListener(
+      async (message, sender, sendResponse) => {
+        console.log('[Background] Received message from website:', message.type);
+
+        // Verify sender origin
+        const allowedOrigins = [
+          'https://repleai.site',
+          'https://www.repleai.site'
+        ];
+
+        if (sender.url && !allowedOrigins.some(origin => sender.url!.startsWith(origin))) {
+          console.warn('[Background] Message from unauthorized origin:', sender.url);
+          return;
+        }
+
+        if (message.type === 'AUTH_SUCCESS') {
+          console.log('[Background] Processing AUTH_SUCCESS');
+
+          // Validate session structure
+          if (!message.session || !message.session.access_token || !message.session.refresh_token) {
+            console.error('[Background] Invalid session received:', message.session ? Object.keys(message.session) : 'null');
+            sendResponse({ success: false, error: 'Invalid session structure (missing tokens)' });
+            return;
+          }
+
+          try {
+            // Update session
+            const { error } = await supabase.auth.setSession(message.session);
+
+            if (error) throw error;
+
+            // Also store raw session just in case
+            await browser.storage.local.set({ authSession: message.session });
+
+            console.log('[Background] Auth session stored successfully');
+            sendResponse({ success: true });
+
+            // Trigger badge update
+            browser.action.setBadgeText({ text: '✓' });
+            browser.action.setBadgeBackgroundColor({ color: '#10b981' });
+            setTimeout(() => {
+              browser.action.setBadgeText({ text: '' });
+            }, 3000);
+
+          } catch (error: any) {
+            console.error('[Background] Error storing auth:', error);
+            sendResponse({ success: false, error: error.message });
+          }
+        }
+
+        return true; // Keep channel open
+      }
+    );
+
+    // Initialize listeners
     initAuthListeners();
 
     // Initialize settings if needed
