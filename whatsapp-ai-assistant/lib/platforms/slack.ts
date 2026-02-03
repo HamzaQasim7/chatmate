@@ -1,11 +1,17 @@
 import type { PlatformAdapter } from './adapter';
 import type { ChatContext } from '../types';
+import { SelectorManager } from '../selector_manager';
 
 export class SlackAdapter implements PlatformAdapter {
     platformId = 'slack' as const;
     private observer: MutationObserver | null = null;
     private debounceTimer: NodeJS.Timeout | null = null;
     private lastProcessedMessage = '';
+    private onCalibrationNeeded: (() => void) | null = null;
+
+    setCalibrationHandler(handler: () => void): void {
+        this.onCalibrationNeeded = handler;
+    }
 
     isMatch(url: string): boolean {
         return url.includes('app.slack.com');
@@ -15,8 +21,14 @@ export class SlackAdapter implements PlatformAdapter {
         return new Promise((resolve) => {
             const checkInterval = setInterval(() => {
                 // Slack's main layout containers
+                // Could be configured remotely
+                const sm = SelectorManager.getInstance();
+                const mainPanel = sm.getSelector('slack', 'main_panel') || '.c-virtual_list__scroll_container';
+
                 const appContainer = document.querySelector('.p-client_container') ||
-                    document.querySelector('[data-qa="slack_kit_scrollbar"]');
+                    document.querySelector('[data-qa="slack_kit_scrollbar"]') ||
+                    document.querySelector(mainPanel);
+
                 if (appContainer) {
                     clearInterval(checkInterval);
                     resolve();
@@ -49,15 +61,20 @@ export class SlackAdapter implements PlatformAdapter {
     extractContext(): ChatContext | null {
         try {
             this.debugLog('Starting message extraction...');
+            const sm = SelectorManager.getInstance();
 
             // Strategy: Find the active message list container
-            const containers = Array.from(document.querySelectorAll('.c-virtual_list__scroll_container'));
+            // Use remote selector if available
+            const mainPanelSelector = sm.getSelector('slack', 'main_panel') || '.c-virtual_list__scroll_container';
+            const containers = Array.from(document.querySelectorAll(mainPanelSelector));
+
             if (containers.length === 0) return null;
 
             // Use the last container found (active chat or thread)
             const activeContainer = containers[containers.length - 1];
 
             // Get messages - look for message kit containers which are the actual message wrappers
+            // We can add a selector for this too if needed, but 'blocks' is quite standard for Slack
             const messageBlocks = activeContainer.querySelectorAll('.c-message_kit__blocks');
 
             // Filter to only messages with actual text content
@@ -91,12 +108,14 @@ export class SlackAdapter implements PlatformAdapter {
 
             // Try multiple selectors for the message body
             const bodySelectors = [
+                sm.getSelector('slack', 'message_body') || '.c-message__body',
                 '.c-message__body',
                 '.p-rich_text_section',
                 '[data-qa="message-text"]'
             ];
 
             for (const selector of bodySelectors) {
+                if (!selector) continue;
                 const bodyElement = lastMessageBlock.querySelector(selector);
                 if (bodyElement) {
                     messageText = (bodyElement as HTMLElement).innerText;
@@ -150,15 +169,34 @@ export class SlackAdapter implements PlatformAdapter {
     }
 
     insertText(text: string): void {
-        // Slack uses ProseMirror/Quill-like editors
-        // Selector: .ql-editor or [contenteditable="true"][role="textbox"]
+        const sm = SelectorManager.getInstance();
+        const remoteInputSelector = sm.getSelector('slack', 'input_field');
 
-        // We need to find the *active* editor.
-        // Heuristic: The editor inside the view we just extracted from?
-        // Or just valid editors.
-        const editors = document.querySelectorAll('[contenteditable="true"][role="textbox"], .ql-editor');
+        // Slack uses ProseMirror/Quill-like editors
+        // Default Selector: .ql-editor or [contenteditable="true"][role="textbox"]
+
+        const selectors = [
+            remoteInputSelector,
+            '[contenteditable="true"][role="textbox"]',
+            '.ql-editor',
+            '[data-qa="message_input"]'
+        ];
+
+        let editors: Element[] = [];
+
+        // Try all selectors
+        for (const sel of selectors) {
+            if (!sel) continue;
+            const found = document.querySelectorAll(sel);
+            if (found.length > 0) {
+                editors = Array.from(found);
+                break;
+            }
+        }
+
         if (editors.length === 0) {
-            console.error('[Slack Adapter] No editor found');
+            console.error('[Slack Adapter] No editor found. Triggering calibration.');
+            if (this.onCalibrationNeeded) this.onCalibrationNeeded();
             return;
         }
 

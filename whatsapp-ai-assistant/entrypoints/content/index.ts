@@ -2,6 +2,7 @@ import { defineContentScript } from 'wxt/utils/define-content-script';
 import { getSettings } from '@/lib/storage';
 import { PlatformFactory } from '@/lib/platforms/factory';
 import type { PlatformAdapter } from '@/lib/platforms/adapter';
+import { mountCalibrationModal } from './CalibrationModal';
 import './content.css';
 
 // Log helper for debugging
@@ -11,6 +12,7 @@ function debugLog(message: string, data?: any) {
 
 let currentAdapter: PlatformAdapter | null = null;
 let updateSidebar: ((action: string, data: any) => void) | null = null;
+// Removed calibrationRoot as it's handled in the modal file
 
 export default defineContentScript({
   matches: ['https://web.whatsapp.com/*', 'https://app.slack.com/*', 'https://www.linkedin.com/*'],
@@ -26,6 +28,12 @@ export default defineContentScript({
       return;
     }
     debugLog(`Initialized adapter for: ${currentAdapter.platformId}`);
+
+    // Create Calibration Handler
+    currentAdapter.setCalibrationHandler(() => {
+      debugLog('Calibration requested by adapter');
+      mountCalibrationModal(currentAdapter!.platformId);
+    });
 
     // Wait for App to load
     await currentAdapter.waitForLoad();
@@ -90,6 +98,8 @@ function createSidebarContainer(): HTMLElement {
   document.body.appendChild(container);
   return container;
 }
+
+
 
 export function setSidebarUpdater(updater: (action: string, data: any) => void) {
   updateSidebar = updater;

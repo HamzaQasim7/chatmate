@@ -2,9 +2,9 @@ import { defineConfig } from 'wxt';
 
 export default defineConfig({
   manifest: {
-    name: 'Reple - AI Reply Assistant',
+    name: 'Reple: AI Sales Copilot for WhatsApp & LinkedIn',
     description: 'Boost productivity with smart AI replies. Generate personalized responses instantly on WhatsApp, LinkedIn, and Slack.',
-    version: '1.3.0',
+    version: '1.3.1',
     permissions: ['storage', 'identity'],
     host_permissions: ['https://web.whatsapp.com/*', 'https://app.slack.com/*', 'https://www.linkedin.com/*', 'https://api.openai.com/*'],
     externally_connectable: {

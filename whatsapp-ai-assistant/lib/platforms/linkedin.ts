@@ -1,11 +1,17 @@
 import type { PlatformAdapter } from './adapter';
 import type { ChatContext } from '../types';
+import { SelectorManager } from '../selector_manager';
 
 export class LinkedInAdapter implements PlatformAdapter {
     platformId = 'linkedin' as const;
     private observer: MutationObserver | null = null;
     private debounceTimer: NodeJS.Timeout | null = null;
     private lastProcessedMessage = '';
+    private onCalibrationNeeded: (() => void) | null = null;
+
+    setCalibrationHandler(handler: () => void): void {
+        this.onCalibrationNeeded = handler;
+    }
 
     isMatch(url: string): boolean {
         return url.includes('linkedin.com');
@@ -110,15 +116,19 @@ export class LinkedInAdapter implements PlatformAdapter {
             '[class*="scaffold-layout__main"]',
             '.msg-thread',
             '[class*="msg-thread"]',
+            // Default configured selector
+            SelectorManager.getInstance().getSelector('linkedin', 'main_panel')
         ];
 
         for (const sel of fullPageSelectors) {
+            if (!sel) continue; // skip empty selectors
             const el = document.querySelector(sel);
             if (el && isValidContainer(el)) {
                 // Verify this container actually has messages inside
                 const hasMessages = el.querySelector('li.msg-s-event-listitem') ||
                     el.querySelector('li[class*="msg-s-event"]') ||
-                    el.querySelector('[class*="message-list"]');
+                    el.querySelector('[class*="message-list"]') ||
+                    el.querySelector(SelectorManager.getInstance().getSelector('linkedin', 'message_container'));
 
                 if (hasMessages) {
                     this.debugLog('Found full page container with messages:', sel);
@@ -152,7 +162,11 @@ export class LinkedInAdapter implements PlatformAdapter {
 
     // Find messages within a container
     private findMessages(container: Element): Element[] {
+        const sm = SelectorManager.getInstance();
+        const remoteMsgSelector = sm.getSelector('linkedin', 'message_container');
+
         const messageSelectors = [
+            remoteMsgSelector,
             'li.msg-s-event-listitem',
             'li[class*="msg-s-event-listitem"]',
             '.msg-s-message-list__event',
@@ -171,6 +185,7 @@ export class LinkedInAdapter implements PlatformAdapter {
             container;
 
         for (const sel of messageSelectors) {
+            if (!sel) continue;
             try {
                 const found = listContainer.querySelectorAll(sel);
                 if (found.length > 0) {
@@ -256,15 +271,6 @@ export class LinkedInAdapter implements PlatformAdapter {
             if (messages.length === 0) {
                 this.debugLog('[FAIL] No messages found in container');
                 this.debugLog('Container classes:', activeContainer.className);
-                // Log innerHTML preview for debugging
-                const preview = activeContainer.innerHTML.substring(0, 300);
-                this.debugLog('Container preview:', preview);
-                // Log all potential message elements for debugging
-                const allLis = activeContainer.querySelectorAll('li');
-                this.debugLog('Found total <li> elements:', allLis.length);
-                if (allLis.length > 0) {
-                    this.debugLog('First <li> classes:', allLis[0].className);
-                }
                 return null;
             }
 
@@ -359,7 +365,11 @@ export class LinkedInAdapter implements PlatformAdapter {
     }
 
     insertText(text: string): void {
+        const sm = SelectorManager.getInstance();
+        const remoteSelector = sm.getSelector('linkedin', 'input_field');
+
         const editorSelectors = [
+            remoteSelector,
             '.msg-overlay-conversation-bubble .msg-form__contenteditable',
             '.msg-form__contenteditable',
             '[contenteditable="true"][role="textbox"]',
@@ -368,12 +378,14 @@ export class LinkedInAdapter implements PlatformAdapter {
 
         let editor: HTMLElement | null = null;
         for (const sel of editorSelectors) {
+            if (!sel) continue;
             editor = document.querySelector(sel) as HTMLElement;
             if (editor) break;
         }
 
         if (!editor) {
-            this.debugLog('No editor found');
+            this.debugLog('No editor found. Triggering calibration.');
+            if (this.onCalibrationNeeded) this.onCalibrationNeeded();
             return;
         }
 

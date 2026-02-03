@@ -33,4 +33,9 @@ export interface PlatformAdapter {
      * Clean up observers
      */
     disconnect(): void;
+
+    /**
+     * Set callback for when calibration is needed (elements not found)
+     */
+    setCalibrationHandler(handler: () => void): void;
 }

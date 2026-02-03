@@ -1,20 +1,28 @@
 import type { PlatformAdapter } from './adapter';
 import type { ChatContext } from '../types';
+import { SelectorManager } from '../selector_manager';
 
 export class WhatsAppAdapter implements PlatformAdapter {
     platformId = 'whatsapp' as const;
     private observer: MutationObserver | null = null;
     private debounceTimer: NodeJS.Timeout | null = null;
     private lastProcessedMessage = '';
+    private onCalibrationNeeded: (() => void) | null = null;
 
     isMatch(url: string): boolean {
         return url.includes('web.whatsapp.com');
     }
 
+    setCalibrationHandler(handler: () => void): void {
+        this.onCalibrationNeeded = handler;
+    }
+
     async waitForLoad(): Promise<void> {
         return new Promise((resolve) => {
             const checkInterval = setInterval(() => {
-                const chatContainer = document.querySelector('[data-testid="conversation-panel-body"]') ||
+                const mainPanelSelector = SelectorManager.getInstance().getSelector('whatsapp', 'main_panel');
+                const chatContainer = document.querySelector(mainPanelSelector) ||
+                    document.querySelector('[data-testid="conversation-panel-body"]') ||
                     document.querySelector('#main') ||
                     document.querySelector('[data-testid="conversation-panel"]');
                 if (chatContainer) {
@@ -37,6 +45,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
     extractContext(): ChatContext | null {
         try {
             this.debugLog('Starting message extraction...');
+            const sm = SelectorManager.getInstance();
 
             // Get sender name
             const headerSelectors = [
@@ -55,8 +64,9 @@ export class WhatsAppAdapter implements PlatformAdapter {
             }
 
             // STRATEGY: Get ALL message rows, then filter by class
-            // This is more robust than data-id which might change format
-            const allRows = Array.from(document.querySelectorAll('div[role="row"]'));
+            // Remote selector or default
+            const rowSelector = sm.getSelector('whatsapp', 'message_container') || 'div[role="row"]';
+            const allRows = Array.from(document.querySelectorAll(rowSelector));
 
             // If specific rows not found, try generic message containers
             const candidates = allRows.length > 0
@@ -68,14 +78,17 @@ export class WhatsAppAdapter implements PlatformAdapter {
                 return null;
             }
 
-            // Identify incoming messages using reliable classes
+            // Identify incoming messages using reliable classes or config
+            const incomingClass = sm.getSelector('whatsapp', 'incoming_message_class') || '.message-in';
+            const outgoingClass = sm.getSelector('whatsapp', 'outgoing_message_class') || '.message-out';
+
             const incomingMessages = candidates.filter(el => {
                 // Check for explicit class
-                if (el.classList.contains('message-in')) return true;
-                if (el.querySelector('.message-in')) return true;
+                if (el.classList.contains(incomingClass.replace('.', ''))) return true;
+                if (el.querySelector(incomingClass)) return true;
 
-                // If it has 'message-out', it's definitely NOT incoming
-                if (el.classList.contains('message-out') || el.querySelector('.message-out')) return false;
+                // Check outgoing
+                if (el.classList.contains(outgoingClass.replace('.', '')) || el.querySelector(outgoingClass)) return false;
 
                 // Fallback: Check data-id for 'false' (legacy check, but useful)
                 const dataId = el.getAttribute('data-id') || el.closest('[data-id]')?.getAttribute('data-id');
@@ -155,21 +168,21 @@ export class WhatsAppAdapter implements PlatformAdapter {
     }
 
     insertText(text: string): void {
-        const inputSelectors = [
-            'div[contenteditable="true"][data-tab="10"]',
-            'div[contenteditable="true"][data-testid="conversation-compose-box-input"]',
-            'footer div[contenteditable="true"]',
-            '#main footer div[contenteditable="true"]',
-        ];
+        const sm = SelectorManager.getInstance();
+        const remoteSelector = sm.getSelector('whatsapp', 'input_field');
 
-        let inputField: HTMLDivElement | null = null;
-        for (const selector of inputSelectors) {
-            inputField = document.querySelector<HTMLDivElement>(selector);
-            if (inputField) break;
+        let inputField = this.findInput(remoteSelector);
+
+        // Fallback: Heuristics
+        if (!inputField) {
+            this.debugLog('Remote selector failed, trying heuristics...');
+            inputField = this.findInputByHeuristics();
         }
 
+        // Final Fallback: Calibration
         if (!inputField) {
-            console.error('[WhatsApp Adapter] Input field not found');
+            console.error('[WhatsApp Adapter] Input field not found. Triggering calibration.');
+            if (this.onCalibrationNeeded) this.onCalibrationNeeded();
             return;
         }
 
@@ -184,13 +197,47 @@ export class WhatsAppAdapter implements PlatformAdapter {
         inputField.focus();
     }
 
+    private findInput(selector: string): HTMLDivElement | null {
+        if (!selector) return null;
+        // Handle comma-separated selectors if any
+        const parts = selector.split(',').map(s => s.trim());
+        for (const part of parts) {
+            const el = document.querySelector<HTMLDivElement>(part);
+            if (el) return el;
+        }
+        return null;
+    }
+
+    private findInputByHeuristics(): HTMLDivElement | null {
+        // 1. Look for contenteditable with specific aria labels
+        const ariaLabels = ['Type a message', 'Type your message', 'Message', 'Input text'];
+        for (const label of ariaLabels) {
+            const el = document.querySelector<HTMLDivElement>(`div[contenteditable="true"][aria-label="${label}"]`);
+            if (el) return el;
+        }
+
+        // 2. Look for element near the "Send" button (usually microphone or paper plane)
+        // This is complex, but we can look for the main footer
+        const footer = document.querySelector('footer');
+        if (footer) {
+            const input = footer.querySelector<HTMLDivElement>('div[contenteditable="true"]');
+            if (input) return input;
+        }
+
+        return null;
+    }
+
     detectNewMessage(node: HTMLElement): boolean {
+        const sm = SelectorManager.getInstance();
+        const incomingClass = sm.getSelector('whatsapp', 'incoming_message_class') || '.message-in';
+        const outgoingClass = sm.getSelector('whatsapp', 'outgoing_message_class') || '.message-out';
+
         // 1. Check for explicit class
-        if (node.classList.contains('message-in')) return true;
-        if (node.querySelector('.message-in')) return true;
+        if (node.classList.contains(incomingClass.replace('.', ''))) return true;
+        if (node.querySelector(incomingClass)) return true;
 
         // 2. If it has 'message-out', ignore it
-        if (node.classList.contains('message-out') || node.querySelector('.message-out')) return false;
+        if (node.classList.contains(outgoingClass.replace('.', '')) || node.querySelector(outgoingClass)) return false;
 
         // 3. Fallback: Check data-id
         // (Only if it's a message row but missing classes)
@@ -202,7 +249,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
 
         // 4. Check for message content wrapper + row role
         const isMessageRow = node.getAttribute('role') === 'row' || node.querySelector('[data-pre-plain-text]') !== null;
-        if (isMessageRow && !node.classList.contains('message-out')) {
+        if (isMessageRow && !node.classList.contains(outgoingClass.replace('.', ''))) {
             // If we're unsure, treat as potential message if it has text
             return node.innerText.length > 0;
         }
@@ -215,7 +262,8 @@ export class WhatsAppAdapter implements PlatformAdapter {
 
         // 1. WATCH FOR CHAT SWITCHES (Header title change)
         const header = document.querySelector('header');
-        const mainPanel = document.querySelector('#main') || document.querySelector('[data-testid="conversation-panel-wrapper"]');
+        const mainSelector = SelectorManager.getInstance().getSelector('whatsapp', 'main_panel');
+        const mainPanel = document.querySelector(mainSelector) || document.querySelector('#main') || document.querySelector('[data-testid="conversation-panel-wrapper"]');
 
         if (mainPanel) {
             // Observer for chat switching (when #main is replaced or header changes)
