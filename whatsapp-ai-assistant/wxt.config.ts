@@ -8,7 +8,7 @@ export default defineConfig({
     description: 'Boost productivity with smart AI replies. Generate personalized responses instantly on WhatsApp, LinkedIn, and Slack.',
     version: '1.3.2',
     permissions: ['storage', 'identity'],
-    host_permissions: ['https://web.whatsapp.com/*', 'https://app.slack.com/*', 'https://www.linkedin.com/*'],
+    host_permissions: ['https://web.whatsapp.com/*', 'https://app.slack.com/*', 'https://www.linkedin.com/*', 'https://www.fiverr.com/*'],
     externally_connectable: {
       matches: [
         'https://repleai.site/*',
@@ -43,7 +43,7 @@ export default defineConfig({
     web_accessible_resources: [
       {
         resources: ['reple-favicon.png'],
-        matches: ['https://web.whatsapp.com/*', 'https://app.slack.com/*', 'https://www.linkedin.com/*'],
+        matches: ['https://web.whatsapp.com/*', 'https://app.slack.com/*', 'https://www.linkedin.com/*', 'https://www.fiverr.com/*'],
       },
     ],
   }),

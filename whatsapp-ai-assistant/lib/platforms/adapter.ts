@@ -1,7 +1,7 @@
 import type { ChatContext } from '../types';
 
 export interface PlatformAdapter {
-    platformId: 'whatsapp' | 'slack' | 'linkedin';
+    platformId: 'whatsapp' | 'slack' | 'linkedin' | 'fiverr';
 
     /**
      * Wait for the main app to load (e.g. chat container presence)

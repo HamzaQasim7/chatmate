@@ -4,6 +4,9 @@ import type { Settings, UsageStats } from './types';
 function getStorageAPI() {
   const g = globalThis as any;
   const b = g.browser || g.chrome;
+  // Check if runtime is valid (prevents context invalidated errors)
+  if (!b?.runtime?.id) return null;
+
   if (!b?.storage?.local) {
     // console.log('[Storage] Browser storage API not available');
     return null;

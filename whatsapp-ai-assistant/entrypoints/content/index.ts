@@ -15,7 +15,7 @@ let updateSidebar: ((action: string, data: any) => void) | null = null;
 // Removed calibrationRoot as it's handled in the modal file
 
 export default defineContentScript({
-  matches: ['https://web.whatsapp.com/*', 'https://app.slack.com/*', 'https://www.linkedin.com/*'],
+  matches: ['https://web.whatsapp.com/*', 'https://app.slack.com/*', 'https://www.linkedin.com/*', 'https://www.fiverr.com/*'],
   cssInjectionMode: 'ui',
 
   async main(_ctx) {
@@ -97,7 +97,7 @@ function createSidebarContainer(): HTMLElement {
   container.style.position = 'fixed';
   container.style.right = '0';
   container.style.top = '0';
-  container.style.zIndex = '9999';
+  container.style.zIndex = '2147483647'; // Max safe integer to ensure visibility
   document.body.appendChild(container);
   return container;
 }

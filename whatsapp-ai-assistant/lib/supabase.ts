@@ -12,14 +12,22 @@ const SUPABASE_ANON_KEY = import.meta.env.WXT_SUPABASE_ANON_KEY;
 
 const storageAdapter = {
     getItem: async (key: string): Promise<string | null> => {
-        const result = await browser.storage.local.get([key]);
-        return (result[key] as string) || null;
+        // Safe check for valid runtime context
+        if (!browser.runtime?.id) return null;
+        try {
+            const result = await browser.storage.local.get([key]);
+            return (result[key] as string) || null;
+        } catch {
+            return null;
+        }
     },
     setItem: async (key: string, value: string) => {
-        await browser.storage.local.set({ [key]: value });
+        if (!browser.runtime?.id) return;
+        try { await browser.storage.local.set({ [key]: value }); } catch { }
     },
     removeItem: async (key: string) => {
-        await browser.storage.local.remove(key);
+        if (!browser.runtime?.id) return;
+        try { await browser.storage.local.remove(key); } catch { }
     },
 };
 

@@ -2,6 +2,7 @@ import type { PlatformAdapter } from './adapter';
 import { WhatsAppAdapter } from './whatsapp';
 import { SlackAdapter } from './slack';
 import { LinkedInAdapter } from './linkedin';
+import { FiverrAdapter } from './fiverr';
 
 export class PlatformFactory {
     private static instance: PlatformAdapter | null = null;
@@ -26,6 +27,12 @@ export class PlatformFactory {
             return this.instance;
         }
 
+        if (url.includes('fiverr.com')) {
+            this.instance = new FiverrAdapter();
+            return this.instance;
+        }
+
         return null;
     }
 }
+

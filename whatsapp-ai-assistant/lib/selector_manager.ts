@@ -30,6 +30,13 @@ const DEFAULT_SELECTORS: Record<string, SelectorConfig> = {
         incoming_message_class: '',
         outgoing_message_class: '',
         main_panel: '.c-virtual_list__scroll_container',
+    },
+    fiverr: {
+        input_field: 'textarea.message-composer',
+        message_container: '.msg-body',
+        incoming_message_class: '',
+        outgoing_message_class: '',
+        main_panel: '.messages-wrapper',
     }
 };
 
@@ -106,6 +113,10 @@ export class SelectorManager {
 
         // Return remote/stored value or fallback to hardcoded default
         return platformConfig[key] || DEFAULT_SELECTORS[platform]?.[key] || '';
+    }
+
+    getSelectors(platform: string): SelectorConfig {
+        return this.selectors[platform] || DEFAULT_SELECTORS[platform] || {} as SelectorConfig;
     }
 
     // Allow manual override (Calibration Mode)
