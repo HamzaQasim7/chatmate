@@ -1,6 +1,9 @@
 import type { PlatformAdapter } from './adapter';
 import type { ChatContext } from '../types';
 import { SelectorManager } from '../selector_manager';
+import { getSettings } from '@/lib/storage';
+
+
 
 export class WhatsAppAdapter implements PlatformAdapter {
     platformId = 'whatsapp' as const;
@@ -8,6 +11,19 @@ export class WhatsAppAdapter implements PlatformAdapter {
     private debounceTimer: NodeJS.Timeout | null = null;
     private lastProcessedMessage = '';
     private onCalibrationNeeded: (() => void) | null = null;
+    private contextWindow: number = 5;
+
+    private async refreshSettings() {
+        try {
+            const settings = await getSettings();
+            if (settings.contextWindow) {
+                this.contextWindow = settings.contextWindow;
+                this.debugLog('Context window updated:', this.contextWindow);
+            }
+        } catch (e) {
+            console.error('Failed to load settings:', e);
+        }
+    }
 
     isMatch(url: string): boolean {
         return url.includes('web.whatsapp.com');
@@ -42,7 +58,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
         console.log(`[WhatsApp Adapter] ${message}`, data || '');
     }
 
-    extractContext(): ChatContext | null {
+    extractContext(options?: { contextWindow?: number }): ChatContext | null {
         try {
             this.debugLog('Starting message extraction...');
             const sm = SelectorManager.getInstance();
@@ -145,8 +161,15 @@ export class WhatsAppAdapter implements PlatformAdapter {
             this.debugLog('Extracted:', { sender: senderName, message: messageText.substring(0, 50) });
 
             // Get context (previous 5 incoming messages)
+            // Get context (previous N incoming messages)
+            const defaultWindow = 5;
+            // Use passed option OR cached setting (this.contextWindow)
+            const windowSize = options?.contextWindow || this.contextWindow || defaultWindow;
+            // Limit logical cap to 10
+            const finalWindowSize = Math.min(Math.max(windowSize, 1), 10);
+
             const contextMessages = incomingMessages
-                .slice(-6, -1) // Last 5 before current
+                .slice(-(finalWindowSize + 1), -1) // e.g. -6 to -1 gets last 5 before current
                 .map(row => {
                     const bubble = row.querySelector('.copyable-text') || row;
                     const spans = bubble.querySelectorAll('.selectable-text span[dir="ltr"]');
@@ -259,6 +282,8 @@ export class WhatsAppAdapter implements PlatformAdapter {
 
     observeMessages(onMessage: (context: ChatContext) => void): void {
         this.disconnect();
+        // Load initial settings
+        this.refreshSettings();
 
         // 1. WATCH FOR CHAT SWITCHES (Header title change)
         const header = document.querySelector('header');
@@ -274,7 +299,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
                 // Wait slightly for DOM to settle then scan
                 if (this.debounceTimer) clearTimeout(this.debounceTimer);
                 this.debounceTimer = setTimeout(() => {
-                    const context = this.extractContext();
+                    const context = this.extractContext({ contextWindow: this.contextWindow });
                     if (context) {
                         this.lastProcessedMessage = context.currentMessage;
                         onMessage(context);
@@ -335,7 +360,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
             if (hasNewMessage) {
                 if (this.debounceTimer) clearTimeout(this.debounceTimer);
                 this.debounceTimer = setTimeout(() => {
-                    const context = this.extractContext();
+                    const context = this.extractContext({ contextWindow: this.contextWindow });
                     if (context && context.currentMessage !== this.lastProcessedMessage) {
                         this.lastProcessedMessage = context.currentMessage;
                         // For chat switches, we might want to trigger even if short, but sticking to logic
@@ -373,7 +398,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
                 this.lastProcessedMessage = ''; // clear cache
 
                 // Force a scan
-                const context = this.extractContext();
+                const context = this.extractContext({ contextWindow: this.contextWindow });
                 if (context) {
                     this.lastProcessedMessage = context.currentMessage;
                     try {

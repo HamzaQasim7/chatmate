@@ -70,6 +70,8 @@ export default defineContentScript({
     });
 
     // Initialize Audio Injector if WhatsApp
+    // Initialize Audio Injector if WhatsApp
+    /* DISABLED TEMPORARILY: audio feature buggy
     if (currentAdapter.platformId === 'whatsapp') {
       const { WhatsAppAudioInjector } = await import('@/lib/platforms/whatsapp_audio');
       const audioInjector = new WhatsAppAudioInjector();
@@ -80,6 +82,7 @@ export default defineContentScript({
       });
       debugLog('Audio injector initialized');
     }
+    */
 
     // Set up keyboard shortcut
     setupKeyboardShortcut();

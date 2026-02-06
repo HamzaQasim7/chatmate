@@ -16,7 +16,7 @@ export interface PlatformAdapter {
     /**
      * Extract current chat context (sender, history, current drafts)
      */
-    extractContext(): ChatContext | null;
+    extractContext(options?: { contextWindow?: number }): ChatContext | null;
 
     /**
      * Insert text into the input field

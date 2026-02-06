@@ -30,14 +30,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         setLoading(true);
         // Open website auth page
         const extensionId = browser.runtime.id;
+        // Add source=popup so website knows to redirect back or close
         await browser.tabs.create({
             url: `https://repleai.site/extension/welcome?extensionId=${extensionId}&source=popup`
         });
 
-        // Use window.close() after a short delay since tab creation is async
-        setTimeout(() => {
-            window.close();
-        }, 500);
+        // We DO NOT close the window here.
+        // We let the user sign in on the new tab.
+        // The App.tsx storage listener will detect the login success, 
+        // update the session state, and unmount this LoginScreen automatically.
     };
 
     return (

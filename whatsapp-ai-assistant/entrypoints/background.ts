@@ -14,18 +14,14 @@ export default defineBackground({
   async main() {
     console.log('[WhatsApp AI Background] Script loaded');
 
-    // Initialize Selector Manager (Remote Config)
-    await SelectorManager.getInstance().init();
+    // 1. REGISTER LISTENERS FIRST (Critical: Must be sync to catch install/messages)
 
-    // Initialize auth listeners (OAuth redirect capture)
     // ========== POST-INSTALL REDIRECT ==========
     browser.runtime.onInstalled.addListener(async (details) => {
       if (details.reason === 'install') {
         console.log('[Background] First install - opening welcome page');
-
         const extensionId = browser.runtime.id;
         const welcomeUrl = `https://repleai.site/extension/welcome?extensionId=${extensionId}`;
-
         await browser.tabs.create({ url: welcomeUrl });
       }
     });
@@ -38,7 +34,8 @@ export default defineBackground({
         // Verify sender origin
         const allowedOrigins = [
           'https://repleai.site',
-          'https://www.repleai.site'
+          'https://www.repleai.site',
+          'http://localhost:3000' // For local dev
         ];
 
         if (sender.url && !allowedOrigins.some(origin => sender.url!.startsWith(origin))) {
@@ -49,35 +46,52 @@ export default defineBackground({
         if (message.type === 'AUTH_SUCCESS') {
           console.log('[Background] Processing AUTH_SUCCESS');
 
-          // Validate session structure
-          if (!message.session || !message.session.access_token || !message.session.refresh_token) {
-            console.error('[Background] Invalid session received:', message.session ? Object.keys(message.session) : 'null');
-            sendResponse({ success: false, error: 'Invalid session structure (missing tokens)' });
+          // 1. EXTRACT TOKENS (Ignore the rest of the messy object)
+          const accessToken = message.session?.access_token;
+          const refreshToken = message.session?.refresh_token;
+
+          if (!accessToken || !refreshToken) {
+            console.error('[Background] Invalid session: Missing tokens', {
+              hasAccess: !!accessToken,
+              hasRefresh: !!refreshToken
+            });
+            sendResponse({ success: false, error: 'Missing tokens' });
             return;
           }
 
           try {
-            // Update session
-            const { error } = await supabase.auth.setSession(message.session);
+            // 2. ATTEMPT STRICT SESSION SET (Only tokens)
+            // Passing the whole object can fail if it has extra/missing fields
+            const { data, error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
 
-            if (error) throw error;
+            if (error) {
+              console.error('[Background] Initial setSession failed:', error.message);
+              // Fallback? Ideally we just want valid tokens.
+              throw error;
+            }
 
-            // Also store raw session just in case
-            await browser.storage.local.set({ authSession: message.session });
+            // 3. VERIFY WE HAVE A USER
+            if (!data.session?.user) {
+              throw new Error('Session set but no user returned');
+            }
 
-            console.log('[Background] Auth session stored successfully');
+            // 4. STORE VALID SESSION
+            await browser.storage.local.set({ authSession: data.session });
+
+            console.log('[Background] Auth session verified & stored');
             sendResponse({ success: true });
 
-            // Trigger badge update
+            // Trigger badge
             browser.action.setBadgeText({ text: '✓' });
             browser.action.setBadgeBackgroundColor({ color: '#10b981' });
-            setTimeout(() => {
-              browser.action.setBadgeText({ text: '' });
-            }, 3000);
+            setTimeout(() => browser.action.setBadgeText({ text: '' }), 3000);
 
           } catch (error: any) {
-            console.error('[Background] Error storing auth:', error);
-            sendResponse({ success: false, error: error.message });
+            console.error('[Background] CRITICAL AUTH ERROR:', error);
+            sendResponse({ success: false, error: error.message || 'Auth failed' });
           }
         }
 
@@ -87,9 +101,6 @@ export default defineBackground({
 
     // Initialize listeners
     initAuthListeners();
-
-    // Initialize settings if needed
-    await getSettings();
 
     // Message listener
     browser.runtime.onMessage.addListener((message: any, _sender: chrome.runtime.MessageSender, sendResponse: (response: any) => void) => {
@@ -168,6 +179,15 @@ export default defineBackground({
 
       return false;
     });
+
+    // 2. NOW PERFORM ASYNC INIT (After listeners are attached)
+
+    // Initialize Selector Manager (Remote Config)
+    // Non-blocking init (don't await) so it doesn't delay other startup logic if slow
+    SelectorManager.getInstance().init().catch(err => console.error('Selector init failed:', err));
+
+    // Initialize settings if needed
+    await getSettings();
   },
 });
 

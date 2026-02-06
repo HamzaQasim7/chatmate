@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-ai-assistant",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "description": "Smart AI-powered response suggestions",
   "type": "module",
   "scripts": {

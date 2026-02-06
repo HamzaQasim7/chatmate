@@ -7,6 +7,7 @@ export interface Settings {
   language: 'en' | 'ur' | 'mixed';
   isEnabled: boolean;
   tone: ToneType;
+  contextWindow: number; // Number of previous messages to include (Default: 5, Max: 10)
 }
 
 // Model configuration

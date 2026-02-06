@@ -181,9 +181,21 @@ function FloatingPopup() {
 
     // Listen for storage changes (real-time updates)
     const storageListener = (changes: { [key: string]: { oldValue?: any; newValue?: any } }, areaName: string) => {
-      if (areaName === 'local' && changes.usageStats?.newValue) {
-        console.log('[Sidebar] Usage updated from storage:', changes.usageStats.newValue);
-        setUsage(changes.usageStats.newValue);
+      if (areaName === 'local') {
+        if (changes.usageStats?.newValue) {
+          console.log('[Sidebar] Usage updated from storage:', changes.usageStats.newValue);
+          setUsage(changes.usageStats.newValue);
+        }
+
+        // AUTH SYNC: Real-time update when background saves session
+        if (changes.authSession?.newValue) {
+          console.log('[Sidebar] Auth session received via storage sync. Refreshing UI...');
+          // Trigger a lightweight regeneration of "loading" state or re-check
+          // In this case, simply clearing the error or forcing a state update
+          setError(null);
+          // Re-fetch usage as well since it depends on auth
+          getUsageStats().then(setUsage);
+        }
       }
     };
     browser.storage.onChanged.addListener(storageListener);

@@ -23,6 +23,7 @@ const DEFAULT_SETTINGS: Settings = {
   language: 'en',
   isEnabled: true,
   tone: 'professional',
+  contextWindow: 5,
 };
 
 export async function getSettings(): Promise<Settings> {
