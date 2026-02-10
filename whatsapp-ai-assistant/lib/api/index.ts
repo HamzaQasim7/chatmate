@@ -5,6 +5,7 @@ interface GenerateReplyParams {
     tone?: string;
     prompt?: string;
     model?: string;
+    provider?: string;
     apiKey?: string;
 }
 

@@ -454,12 +454,12 @@ async function generateSuggestions(context: ChatContext, customInstruction?: str
     // 2. PREPARE PROMPT
     const systemPrompt = getSystemPrompt(tone, settings.language);
 
-    // Resolve OpenAI model ID
+    // Resolve model for the selected provider
     const modelConfig = MODEL_CONFIG[settings.model || 'reple-smart'];
-    // Fallback to safe default if config missing
-    const openAIModel = modelConfig ? modelConfig.openAIModel : 'gpt-4.1-mini';
+    const provider = settings.provider || 'openai';
+    const resolvedModel = modelConfig?.providerModels?.[provider] || 'gpt-4o-mini';
 
-    console.log('[WhatsApp AI Background] Using Model:', openAIModel);
+    console.log('[WhatsApp AI Background] Using Provider:', provider, 'Model:', resolvedModel);
 
     // 3. CALL SERVER API (Secure)
     console.log('[WhatsApp AI Background] Calling Server API...'); const messages = context.previousMessages.map(msg => ({ role: 'user', content: msg }));
@@ -474,7 +474,8 @@ async function generateSuggestions(context: ChatContext, customInstruction?: str
       messages: messages,
       tone: tone,
       prompt: finalPrompt,
-      model: openAIModel,
+      model: resolvedModel,
+      provider: provider,
       apiKey: settings.apiKey // Pass user key if present
     });
 
@@ -567,13 +568,28 @@ async function fetchCurrentUsage(): Promise<{ usage: number; limit: number }> {
   }
 }
 
+// Language prompt instructions — keyed by language code
+const LANGUAGE_PROMPTS: Record<string, string> = {
+  ur: 'Respond in Urdu (you may use Roman Urdu script).',
+  mixed: 'Respond in a natural mix of English and Urdu (Roman Urdu is acceptable).',
+  es: 'Respond entirely in Spanish (Español).',
+  pt: 'Respond entirely in Brazilian Portuguese (Português).',
+  hi: 'Respond in Hindi (you may use Hinglish/Roman Hindi script).',
+  ar: 'Respond entirely in Arabic (العربية).',
+  fr: 'Respond entirely in French (Français).',
+  id: 'Respond entirely in Indonesian (Bahasa Indonesia).',
+  de: 'Respond entirely in German (Deutsch).',
+  tr: 'Respond entirely in Turkish (Türkçe).',
+  ru: 'Respond entirely in Russian (Русский).',
+  it: 'Respond entirely in Italian (Italiano).',
+};
+
 // Helper functions remain mostly same, simplified buildUserPrompt as it's now handled by logic above
 function getSystemPrompt(tone: ToneType, language: string): string {
   let basePrompt = TONE_PROMPTS[tone] || TONE_PROMPTS.professional;
-  if (language === 'ur') {
-    basePrompt += '\n\nIMPORTANT: Respond in Urdu (you may use Roman Urdu script).';
-  } else if (language === 'mixed') {
-    basePrompt += '\n\nIMPORTANT: Respond in a natural mix of English and Urdu (Roman Urdu is acceptable).';
+  const langPrompt = LANGUAGE_PROMPTS[language];
+  if (langPrompt) {
+    basePrompt += `\n\nIMPORTANT: ${langPrompt}`;
   }
   return basePrompt;
 }

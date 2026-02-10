@@ -10,6 +10,137 @@ const corsHeaders = {
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// ==================== PROVIDER HANDLERS ====================
+
+async function callOpenAI(
+    model: string,
+    messages: any[],
+    apiKey: string
+): Promise<string> {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+            model,
+            messages,
+            temperature: 0.7,
+            max_tokens: 300
+        })
+    })
+
+    const data = await response.json()
+    if (data.error) throw new Error(data.error.message || 'OpenAI API Error')
+    return data.choices[0].message.content
+}
+
+async function callGemini(
+    model: string,
+    messages: any[],
+    apiKey: string
+): Promise<string> {
+    // Convert OpenAI format → Gemini format
+    // Gemini uses 'model' role instead of 'assistant', and system prompt goes into systemInstruction
+    const systemMsg = messages.find((m: any) => m.role === 'system')
+    const chatMessages = messages.filter((m: any) => m.role !== 'system')
+
+    const contents = chatMessages.map((msg: any) => ({
+        role: msg.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: msg.content }]
+    }))
+
+    const body: any = {
+        contents,
+        generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 300,
+        }
+    }
+
+    // Add system instruction if present
+    if (systemMsg) {
+        body.systemInstruction = {
+            parts: [{ text: systemMsg.content }]
+        }
+    }
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    })
+
+    const data = await response.json()
+
+    if (data.error) {
+        throw new Error(data.error.message || 'Gemini API Error')
+    }
+
+    if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
+        throw new Error('Gemini returned no content')
+    }
+
+    return data.candidates[0].content.parts[0].text
+}
+
+async function callClaude(
+    model: string,
+    messages: any[],
+    apiKey: string
+): Promise<string> {
+    // Claude uses a separate 'system' parameter, not in messages array
+    const systemMsg = messages.find((m: any) => m.role === 'system')
+    const chatMessages = messages
+        .filter((m: any) => m.role !== 'system')
+        .map((msg: any) => ({
+            role: msg.role === 'assistant' ? 'assistant' : 'user',
+            content: msg.content
+        }))
+
+    const body: any = {
+        model,
+        messages: chatMessages,
+        max_tokens: 300,
+        temperature: 0.7,
+    }
+
+    if (systemMsg) {
+        body.system = systemMsg.content
+    }
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify(body)
+    })
+
+    const data = await response.json()
+
+    if (data.error) {
+        throw new Error(data.error.message || 'Claude API Error')
+    }
+
+    if (data.type === 'error') {
+        throw new Error(data.error?.message || 'Claude API Error')
+    }
+
+    if (!data.content?.[0]?.text) {
+        throw new Error('Claude returned no content')
+    }
+
+    return data.content[0].text
+}
+
+// ==================== MAIN HANDLER ====================
+
 serve(async (req) => {
     // Handle CORS
     if (req.method === 'OPTIONS') {
@@ -30,13 +161,14 @@ serve(async (req) => {
 
         if (!user) throw new Error('Unauthorized')
 
-        // 2. PARSE REQUEST (Moved up to access apiKey)
-        const { messages, tone, prompt, model, apiKey: rawUserApiKey } = await req.json()
+        // 2. PARSE REQUEST
+        const { messages, tone, prompt, model, provider: rawProvider, apiKey: rawUserApiKey } = await req.json()
 
-        // Clean the user key (trim whitespace)
+        // Clean inputs
         const userApiKey = rawUserApiKey?.trim?.();
+        const provider = rawProvider || 'openai';
 
-        // 3. CHECK LIMITS (The Business Logic)
+        // 3. CHECK LIMITS (Business Logic)
         // If user provides their OWN key, they are exempt from limits.
         let usage = 0;
         let limit = 20;
@@ -68,57 +200,48 @@ serve(async (req) => {
             }
         }
 
-        // 4. AI GENERATION (OpenAI)
-        let apiKey = userApiKey;
+        // 4. AI GENERATION (Provider Router)
+        let activeApiKey = userApiKey;
         let finalModel = model;
 
-        if (apiKey) {
-            // PRO TIER (User Key)
-            console.log('[Generate Reply] Using USER KEY');
-            const allowedModels = ['gpt-5-nano', 'gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini', 'gpt-4o'];
-            finalModel = allowedModels.includes(model) ? model : 'gpt-4.1-mini';
-        } else {
-            // FREE TIER (Server Key)
-            console.log('[Generate Reply] Using SERVER KEY (Free Tier)');
-            finalModel = 'gpt-4o-mini';
-
-            apiKey = Deno.env.get('OPENAI_API_KEY')?.trim();
-            if (!apiKey) throw new Error('Server Config Error: OPENAI_API_KEY missing');
-        }
-
-        console.log('[Generate Reply] Final Model:', finalModel);
-        if (apiKey) console.log('[Generate Reply] Key Prefix:', apiKey.substring(0, 10) + '...');
-
-
-        // Construct full message history for OpenAI
+        // Construct full message history
         const fullMessages = [
             { role: "system", content: prompt || "You are a helpful assistant." },
             ...messages
         ];
 
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-                model: finalModel,
-                messages: fullMessages,
-                temperature: 0.7,
-                max_tokens: 300
-            })
-        })
+        let reply: string;
 
-        const data = await response.json()
+        if (activeApiKey) {
+            // ===== BYOK MODE: Use the user's own key =====
+            console.log(`[Generate Reply] BYOK Mode — Provider: ${provider}, Model: ${finalModel}`);
 
-        if (data.error) {
-            throw new Error(data.error.message || 'OpenAI API Error')
+            switch (provider) {
+                case 'gemini':
+                    reply = await callGemini(finalModel, fullMessages, activeApiKey);
+                    break;
+                case 'claude':
+                    reply = await callClaude(finalModel, fullMessages, activeApiKey);
+                    break;
+                case 'openai':
+                default:
+                    reply = await callOpenAI(finalModel, fullMessages, activeApiKey);
+                    break;
+            }
+        } else {
+            // ===== FREE TIER: Always use server's OpenAI key =====
+            console.log('[Generate Reply] Free Tier — Using SERVER OpenAI KEY');
+            finalModel = 'gpt-4o-mini'; // Force cost-efficient model for free tier
+
+            activeApiKey = Deno.env.get('OPENAI_API_KEY')?.trim();
+            if (!activeApiKey) throw new Error('Server Config Error: OPENAI_API_KEY missing');
+
+            reply = await callOpenAI(finalModel, fullMessages, activeApiKey);
         }
 
-        const reply = data.choices[0].message.content
+        console.log('[Generate Reply] Success — Provider:', provider, 'Model:', finalModel);
 
-        // 4. LOG USAGE
+        // 5. LOG USAGE
         console.log('Attempting to insert usage log for user:', user.id)
         const { error: insertError } = await supabaseClient.from('usage_logs').insert({
             user_id: user.id,
@@ -137,6 +260,7 @@ serve(async (req) => {
         )
 
     } catch (error: any) {
+        console.error('[Generate Reply] Error:', error.message);
         return new Response(
             JSON.stringify({ error: error.message }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }

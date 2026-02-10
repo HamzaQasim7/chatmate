@@ -30,6 +30,20 @@ import { getSettings, saveSettings, getUsageStats } from '@/lib/storage';
 import type { Suggestion, ToneType, Settings, UsageStats, AudioAnalysisResult } from '@/lib/types';
 import { TONE_CONFIG } from '@/lib/types';
 
+// Retry wrapper for browser.runtime.sendMessage — handles MV3 service worker wake-up
+async function sendMessageWithRetry(message: any, retries = 1): Promise<any> {
+  try {
+    return await browser.runtime.sendMessage(message);
+  } catch (err: any) {
+    if (retries > 0 && err.message?.includes('Receiving end does not exist')) {
+      console.log('[Sidebar] Service worker asleep, retrying in 500ms...');
+      await new Promise(r => setTimeout(r, 500));
+      return sendMessageWithRetry(message, retries - 1);
+    }
+    throw err;
+  }
+}
+
 let sidebarUpdateFn: ((action: string, data: any) => void) | null = null;
 
 // Icon components for tones
@@ -360,7 +374,7 @@ function FloatingPopup() {
     setRegenerating(true);
     setError(null);
     try {
-      const response = await browser.runtime.sendMessage({
+      const response = await sendMessageWithRetry({
         action: 'regenerate',
         customInstruction: customInput
       });
@@ -369,7 +383,6 @@ function FloatingPopup() {
       if (response?.error) setError(response.error);
     } catch (err: any) {
       console.error('Regenerate error:', err);
-      // specific check for context invalidated
       if (err.message && err.message.includes('Extension context invalidated')) {
         setError('Extension updated. Please refresh the page.');
       } else {
@@ -388,7 +401,7 @@ function FloatingPopup() {
     setExpanded(true); // Ensure expanded
 
     try {
-      const response = await browser.runtime.sendMessage({
+      const response = await sendMessageWithRetry({
         action: 'generateSuggestions',
         data: currentContext
       });
@@ -402,7 +415,13 @@ function FloatingPopup() {
       }
     } catch (err: any) {
       console.error('Generation error:', err);
-      setError(err.message || 'Failed to generate');
+      if (err.message && err.message.includes('Extension context invalidated')) {
+        setError('Extension updated. Please refresh the page.');
+      } else if (err.message && err.message.includes('Receiving end does not exist')) {
+        setError('Connection lost. Please refresh the page.');
+      } else {
+        setError(err.message || 'Failed to generate');
+      }
     } finally {
       setLoading(false);
     }

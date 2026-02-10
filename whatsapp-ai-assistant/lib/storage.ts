@@ -21,6 +21,7 @@ const DEFAULT_USAGE: UsageStats = {
 };
 
 const DEFAULT_SETTINGS: Settings = {
+  provider: 'openai',
   apiKey: '',
   model: 'reple-smart',
   language: 'en',
