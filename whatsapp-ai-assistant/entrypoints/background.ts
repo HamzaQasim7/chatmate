@@ -35,7 +35,7 @@ export default defineBackground({
         const allowedOrigins = [
           'https://repleai.site',
           'https://www.repleai.site',
-          'http://localhost:3000' // For local dev
+          'http://localhost:3000'
         ];
 
         if (sender.url && !allowedOrigins.some(origin => sender.url!.startsWith(origin))) {
@@ -44,44 +44,33 @@ export default defineBackground({
         }
 
         if (message.type === 'AUTH_SUCCESS') {
-          console.log('[Background] Processing AUTH_SUCCESS');
+          console.log('[Background] Processing AUTH_SUCCESS', message);
 
-          // 1. EXTRACT TOKENS (Ignore the rest of the messy object)
-          const accessToken = message.session?.access_token;
-          const refreshToken = message.session?.refresh_token;
+          // 1. EXTRACT SESSION
+          const session = message.session;
 
-          if (!accessToken || !refreshToken) {
-            console.error('[Background] Invalid session: Missing tokens', {
-              hasAccess: !!accessToken,
-              hasRefresh: !!refreshToken
-            });
+          if (!session?.access_token || !session?.refresh_token) {
+            console.error('[Background] Invalid session: Missing tokens');
             sendResponse({ success: false, error: 'Missing tokens' });
             return;
           }
 
           try {
-            // 2. ATTEMPT STRICT SESSION SET (Only tokens)
-            // Passing the whole object can fail if it has extra/missing fields
-            const { data, error } = await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken,
+            // 2. CRITICAL: Save to storage FIRST (Source of Truth for popup)
+            // We do this BEFORE supabase validation to ensure data persistence
+            await browser.storage.local.set({ authSession: session });
+            console.log('[Background] Session saved to local storage directly.');
+
+            // 3. Optional: Try to set session in background for API calls
+            const { error } = await supabase.auth.setSession({
+              access_token: session.access_token,
+              refresh_token: session.refresh_token,
             });
 
-            if (error) {
-              console.error('[Background] Initial setSession failed:', error.message);
-              // Fallback? Ideally we just want valid tokens.
-              throw error;
-            }
+            if (error) console.warn('[Background] Background Supabase auth failed (non-critical):', error);
+            else console.log('[Background] Background Supabase auth active');
 
-            // 3. VERIFY WE HAVE A USER
-            if (!data.session?.user) {
-              throw new Error('Session set but no user returned');
-            }
-
-            // 4. STORE VALID SESSION
-            await browser.storage.local.set({ authSession: data.session });
-
-            console.log('[Background] Auth session verified & stored');
+            // 4. Respond Success
             sendResponse({ success: true });
 
             // Trigger badge
@@ -90,12 +79,12 @@ export default defineBackground({
             setTimeout(() => browser.action.setBadgeText({ text: '' }), 3000);
 
           } catch (error: any) {
-            console.error('[Background] CRITICAL AUTH ERROR:', error);
-            sendResponse({ success: false, error: error.message || 'Auth failed' });
+            console.error('[Background] Storage error:', error);
+            sendResponse({ success: false, error: error.message });
           }
         }
 
-        return true; // Keep channel open
+        return true;
       }
     );
 

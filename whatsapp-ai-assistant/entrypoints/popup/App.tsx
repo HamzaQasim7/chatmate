@@ -15,6 +15,26 @@ export default function App() {
 
   useEffect(() => {
     checkUser();
+
+    // Listen for storage changes (session synced from background script)
+    const handleStorageChange = async (changes: { [key: string]: chrome.storage.StorageChange }) => {
+      if (changes.authSession?.newValue) {
+        const authSession = changes.authSession.newValue;
+        // Hydrate Supabase with the new session
+        await supabase.auth.setSession({
+          access_token: authSession.access_token,
+          refresh_token: authSession.refresh_token,
+        });
+        // Re-check user to update state
+        checkUser();
+      }
+    };
+
+    browser.storage.local.onChanged.addListener(handleStorageChange);
+
+    return () => {
+      browser.storage.local.onChanged.removeListener(handleStorageChange);
+    };
   }, []);
 
   const checkUser = async () => {

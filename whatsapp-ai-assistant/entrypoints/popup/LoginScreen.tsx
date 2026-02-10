@@ -12,9 +12,65 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     useEffect(() => {
         // Check if already logged in (polling for session from website)
         const checkSession = async () => {
+            // 1. Standard Supabase Check
             const { data: { session } } = await supabase.auth.getSession();
             if (session) {
                 onLoginSuccess();
+                return;
+            }
+
+            // 2. Fallback: Check local storage backup from background script
+            try {
+                const stored = await browser.storage.local.get('authSession');
+                if (stored.authSession) {
+                    const { data, error } = await supabase.auth.setSession({
+                        access_token: stored.authSession.access_token,
+                        refresh_token: stored.authSession.refresh_token,
+                    });
+
+                    if (!error && data.session) {
+                        onLoginSuccess();
+                        return;
+                    }
+                }
+            } catch {
+                // Silent fail
+            }
+
+            // 3. NEW: Poll Supabase for pending auth (cross-origin bridge)
+            try {
+                const extensionId = browser.runtime.id;
+                const { data: pendingAuth, error } = await supabase
+                    .from('pending_extension_auth')
+                    .select('session_data')
+                    .eq('extension_id', extensionId)
+                    .single();
+
+                if (!error && pendingAuth?.session_data) {
+                    const sessionData = pendingAuth.session_data;
+
+                    // Try to set session
+                    const { data, error: authError } = await supabase.auth.setSession({
+                        access_token: sessionData.access_token,
+                        refresh_token: sessionData.refresh_token,
+                    });
+
+                    if (!authError && data.session) {
+                        // Save to backup storage
+                        await browser.storage.local.set({ authSession: sessionData });
+
+                        // Delete the pending auth row (cleanup)
+                        await supabase
+                            .from('pending_extension_auth')
+                            .delete()
+                            .eq('extension_id', extensionId);
+
+                        onLoginSuccess();
+                        return;
+                    }
+                }
+            } catch {
+                // Silent fail - table might not exist yet
             }
         };
 
@@ -28,17 +84,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
     const handleWebLogin = async () => {
         setLoading(true);
-        // Open website auth page
         const extensionId = browser.runtime.id;
-        // Add source=popup so website knows to redirect back or close
         await browser.tabs.create({
             url: `https://repleai.site/extension/welcome?extensionId=${extensionId}&source=popup`
         });
-
-        // We DO NOT close the window here.
-        // We let the user sign in on the new tab.
-        // The App.tsx storage listener will detect the login success, 
-        // update the session state, and unmount this LoginScreen automatically.
     };
 
     return (
